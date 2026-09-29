@@ -55,6 +55,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `NANO_STREAM` | `1` | `0` prints each reply only once it is complete |
 | `NANO_COMPACT_AT` | `0.75` | fraction of `NANO_NUM_CTX` at which history gets shrunk; the rest is room for the reply |
 | `NANO_MAX_STEPS` | `25` | tool rounds per user turn before giving up |
+| `NANO_SUBAGENT_MAX_STEPS` | `15` | tool rounds a `task` subagent gets before it must report |
 | `NANO_WORKDIR` | cwd | the sandbox root; tools refuse to leave it |
 | `NANO_SESSION_DIR` | `~/.local/share/nanoharness/sessions` | keep saved conversations elsewhere |
 
@@ -68,6 +69,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `permissions.py` | the gate between "the model asked" and "it ran" |
 | `context.py` | keeps the history inside `num_ctx` |
 | `session.py` | saves and resumes conversations |
+| `subagent.py` | the `task` tool's fresh, read-only agent |
 | `agent.py` | the loop |
 | `cli.py` | REPL |
 
@@ -96,7 +98,7 @@ The system prompt and the current request are never touched. A grey line says wh
 
 ## Tools
 
-`read_file` · `write_file` · `edit_file` (exact unique string replace) · `glob` · `grep` · `bash`
+`read_file` · `write_file` · `edit_file` (exact unique string replace) · `glob` · `grep` · `bash` · `task`
 
 `glob` and `grep` are pure Python (no ripgrep), read-only so they never prompt, skip
 `.git`/`.venv`/`node_modules`/caches and binary files, and ignore symlinks that point outside
@@ -108,6 +110,13 @@ Small models usually self-correct when told what went wrong; a crash teaches the
 The wording matters: terse errors let this model narrate intent as fact, so denials and
 failures say explicitly that nothing changed.
 
+`task` hands a research question to a **subagent**: a fresh agent with its own empty history
+and only `read_file`/`glob`/`grep`, so it never prompts, cannot change anything and cannot start
+subagents of its own. Only its final report comes back; the files it read stay out of the main
+history (in a live run: ~2k tokens with `task` against ~12k reading the same files directly). It
+gets `NANO_SUBAGENT_MAX_STEPS` rounds, then is asked for a partial report. The model rarely
+delegates on its own, so ask for it ("use task to find out ...").
+
 **`bash` is not sandboxed.** The file tools refuse to resolve outside `WORKDIR`, but
 `bash` runs with your full user privileges and only starts in `WORKDIR` — `cat > ~/.bashrc`
 would go straight through. The permission prompt is the only thing standing there, so read
@@ -116,4 +125,5 @@ the command before approving, and be sparing with `[a]lways` on `bash`. Real con
 
 ## Not yet
 
-subagents
+Subagents that can write (they would need their own approval story) · a `bwrap` sandbox
+for `bash` (required before unattended use)

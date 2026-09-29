@@ -15,6 +15,7 @@ STREAM = os.environ.get("NANO_STREAM", "1") == "1"  # print the reply as it is g
 COMPACT_AT = float(os.environ.get("NANO_COMPACT_AT", "0.75"))
 
 MAX_STEPS = int(os.environ.get("NANO_MAX_STEPS", "25"))   # tool rounds per user turn
+SUBAGENT_MAX_STEPS = int(os.environ.get("NANO_SUBAGENT_MAX_STEPS", "15"))
 BASH_TIMEOUT = int(os.environ.get("NANO_BASH_TIMEOUT", "60"))
 MAX_TOOL_OUTPUT = int(os.environ.get("NANO_MAX_TOOL_OUTPUT", "8000"))  # chars
 HTTP_TIMEOUT = int(os.environ.get("NANO_HTTP_TIMEOUT", "300"))
@@ -34,8 +35,9 @@ def system_prompt() -> str:
     return f"""You are a coding agent working in the directory {WORKDIR}.
 
 You have tools to read, write and edit files, find files (glob), search their
-contents (grep), and run shell commands. Use them instead of guessing: read a file
-before you edit it. Prefer glob and grep over find and grep in bash.
+contents (grep), run shell commands, and delegate research to a subagent (task).
+Use them instead of guessing: read a file before you edit it. Prefer glob and grep
+over find and grep in bash.
 
 Rules:
 - Paths may be relative to the working directory. Never go outside it.
@@ -45,5 +47,8 @@ Rules:
   what to do next.
 - A tool result beginning with 'Error:' means the action did NOT happen. Never report
   success for a tool call that returned an error, and never invent output you did not see.
+- To answer a question about how the code works, if it would take reading more than
+  two files, call task instead of reading them yourself. Your context is small; the
+  subagent's report is short.
 - When the task is done, reply with a short plain-text summary and no tool call.
 """

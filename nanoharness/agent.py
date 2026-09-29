@@ -7,9 +7,15 @@ from .tools import REGISTRY, ToolError, schemas
 
 
 class Agent:
-    def __init__(self, permissions: Permissions = None, on_token=None, session=None, messages=None):
+    def __init__(self, permissions: Permissions = None, on_token=None, session=None, messages=None,
+                 tools=None, system=None, max_steps=None, depth=0):
         # A resumed history gets today's system prompt: the code may have changed since.
-        self.messages = [{"role": "system", "content": config.system_prompt()}] + (messages or [])[1:]
+        system = system or config.system_prompt()
+        self.messages = [{"role": "system", "content": system}] + (messages or [])[1:]
+        self.tools = list(tools or REGISTRY)   # names this agent may call; a subagent gets fewer
+        self.max_steps = max_steps or config.MAX_STEPS
+        self.depth = depth                     # 0 for the REPL's agent, 1 for a subagent
+        self.stopped = False                   # did the last turn run out of steps?
         self.permissions = permissions or Permissions()
         self.session = session   # saved after every message when set
         # on_token(kind, text) shows the reply as it streams; kind "end" closes each reply.
@@ -32,9 +38,9 @@ class Agent:
         if not isinstance(args, dict):
             return f"Error: arguments for {name} must be an object, got {type(args).__name__}."
 
-        tool = REGISTRY.get(name)
+        tool = REGISTRY.get(name) if name in self.tools else None
         if tool is None:
-            return f"Error: no such tool {name!r}. Available tools: {', '.join(REGISTRY)}."
+            return f"Error: no such tool {name!r}. Available tools: {', '.join(self.tools)}."
 
         try:
             self.permissions.check(tool, args)
@@ -65,6 +71,7 @@ class Agent:
         user_message = {"role": "user", "content": user_input}
         self.messages.append(user_message)
         self.dropped_input = False
+        self.stopped = False
         self.save()
         try:
             return self._loop()
@@ -80,11 +87,12 @@ class Agent:
             self.save()
 
     def _loop(self):
-        for step in range(config.MAX_STEPS):
-            self.messages, note = context.fit(self.messages, schemas())
+        indent = "  " + "    " * self.depth
+        for step in range(self.max_steps):
+            self.messages, note = context.fit(self.messages, schemas(self.tools))
             if note:
-                print(f"\033[90m  ({note})\033[0m")
-            reply = client.chat(self.messages, schemas(), on_token=self.on_token)
+                print(f"\033[90m{indent}({note})\033[0m")
+            reply = client.chat(self.messages, schemas(self.tools), on_token=self.on_token)
             if self.on_token:
                 self.on_token("end", "")
             self.messages.append(reply)
@@ -94,12 +102,13 @@ class Agent:
             if not calls:
                 return reply.get("content", "").strip()
 
-            if reply.get("content", "").strip() and not self.on_token:  # else already shown
+            # Narration between tool calls; a subagent's stays quiet, only its report matters.
+            if reply.get("content", "").strip() and not self.on_token and not self.depth:
                 print(f"\033[90m{reply['content'].strip()}\033[0m")
 
             for i, call in enumerate(calls):
                 name = call.get("function", {}).get("name", "?")
-                print(f"\033[36m  → {name}\033[0m")
+                print(f"\033[36m{indent}{'↳' if self.depth else '→'} {name}\033[0m")
                 try:
                     result = self.run_tool(call)
                 except KeyboardInterrupt:
@@ -117,4 +126,5 @@ class Agent:
                     raise
                 self.add_tool_result(name, result)
 
-        return f"(stopped after {config.MAX_STEPS} tool rounds — the model did not finish)"
+        self.stopped = True
+        return f"(stopped after {self.max_steps} tool rounds — the model did not finish)"

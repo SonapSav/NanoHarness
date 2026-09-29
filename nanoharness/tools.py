@@ -34,8 +34,9 @@ def tool(name, description, parameters, writes, preview):
     return register
 
 
-def schemas():
-    """The `tools` array sent to Ollama, in OpenAI function-calling shape."""
+def schemas(names=None):
+    """The `tools` array sent to Ollama, in OpenAI function-calling shape. `names`
+    limits it to those tools (a subagent sees fewer)."""
     return [
         {
             "type": "function",
@@ -46,6 +47,7 @@ def schemas():
             },
         }
         for t in REGISTRY.values()
+        if names is None or t.name in names
     ]
 
 
@@ -384,3 +386,29 @@ def grep(pattern, path=".", glob=None, ignore_case=False):
         out += (f"\n\n[stopped at {MAX_GREP_MATCHES} matches; narrow the pattern, "
                 "or pass path or glob]")
     return truncate(out)
+
+
+# --- subagents -------------------------------------------------------------
+
+@tool(
+    name="task",
+    description="Delegate a research question to a subagent with a fresh, empty context. "
+                "It can use read_file, glob and grep (it cannot change files or run commands) "
+                "and returns only its final report, so the files it reads do not fill up your "
+                "context. Use it for questions that need many files read, e.g. 'how is X "
+                "implemented' or 'find every place that does Y'. It cannot see this "
+                "conversation: write a complete, self-contained instruction.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "prompt": {"type": "string",
+                       "description": "The full task, including what to report back."},
+        },
+        "required": ["prompt"],
+    },
+    writes=False,   # its tools are read-only
+    preview=lambda prompt="", **kw: f"task: {prompt[:80]}",
+)
+def task(prompt):
+    from . import subagent   # lazy: subagent imports agent, which imports this module
+    return truncate(subagent.run(prompt))
