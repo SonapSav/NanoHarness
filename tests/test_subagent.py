@@ -181,3 +181,11 @@ def test_research_subagent_has_no_change_note(agent, monkeypatch):
     script(monkeypatch, calls("task", prompt="look"), say("found it"), say("ok"))
     agent.turn("go")
     assert agent.messages[-2]["content"] == "found it"
+
+
+def test_subagent_prompt_lists_the_project_files(agent, monkeypatch):
+    """Without it the subagent opened with glob, or with bash it does not even have."""
+    seen = script(monkeypatch, calls("task", prompt="look"), say("r"), say("ok"))
+    agent.turn("go")
+    sub_system = seen[1][2][0]["content"]
+    assert "Files in the working directory" in sub_system and "big.txt" in sub_system

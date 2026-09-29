@@ -56,13 +56,13 @@ OUT_OF_STEPS = ("You have run out of tool calls. Do not call any more tools. Rep
 
 
 def run(task: str, write: bool = False) -> str:
-    from .agent import Agent   # here, not at the top: agent imports tools imports us
+    from .agent import Agent, with_file_tree   # here, not at the top: agent imports tools imports us
 
     sub = Agent(
         # Research needs no gate (nothing it has can prompt); a writer shares its parent's.
         CURRENT.get(Permissions()) if write else Permissions(),
         tools=WRITE_TOOLS if write else RESEARCH_TOOLS,
-        system=system_prompt(write),
+        system=with_file_tree(system_prompt(write)),
         max_steps=config.SUBAGENT_MAX_STEPS,
         depth=1,
     )
