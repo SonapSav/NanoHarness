@@ -43,10 +43,24 @@ class Agent:
         except Exception as e:  # never let a tool take the REPL down
             return f"Error: {name} failed unexpectedly: {type(e).__name__}: {e}"
 
+    def add_tool_result(self, name: str, content: str):
+        self.messages.append({"role": "tool", "tool_name": name, "content": content})
+
     def turn(self, user_input: str):
         """One user message in, one final assistant message out (via N tool rounds)."""
+        start = len(self.messages)
         self.messages.append({"role": "user", "content": user_input})
+        try:
+            return self._loop()
+        except BaseException:  # ModelError, KeyboardInterrupt
+            # If the model never answered, drop the user message so a retry is not a duplicate.
+            # Once it has, keep everything: tools may have changed the disk, and the model
+            # needs that record.
+            if len(self.messages) == start + 1:
+                del self.messages[start:]
+            raise
 
+    def _loop(self):
         for step in range(config.MAX_STEPS):
             reply = client.chat(self.messages, schemas())
             self.messages.append(reply)
@@ -58,14 +72,24 @@ class Agent:
             if reply.get("content", "").strip():
                 print(f"\033[90m{reply['content'].strip()}\033[0m")
 
-            for call in calls:
+            for i, call in enumerate(calls):
                 name = call.get("function", {}).get("name", "?")
                 print(f"\033[36m  → {name}\033[0m")
-                result = self.run_tool(call)
-                self.messages.append({
-                    "role": "tool",
-                    "tool_name": name,
-                    "content": result,
-                })
+                try:
+                    result = self.run_tool(call)
+                except KeyboardInterrupt:
+                    # Every tool call must get a result, or the next request sends Ollama
+                    # a dangling call.
+                    self.add_tool_result(name, (
+                        "Error: the user interrupted this call. It may not have run, or may "
+                        "have stopped partway. Do not assume it succeeded."
+                    ))
+                    for rest in calls[i + 1:]:
+                        self.add_tool_result(rest.get("function", {}).get("name", "?"), (
+                            "Error: skipped because the user interrupted an earlier call. "
+                            "It did NOT run."
+                        ))
+                    raise
+                self.add_tool_result(name, result)
 
         return f"(stopped after {config.MAX_STEPS} tool rounds — the model did not finish)"
