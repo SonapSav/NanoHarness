@@ -86,7 +86,12 @@ The system prompt and the current request are never touched. A grey line says wh
 
 ## Tools
 
-`read_file` · `write_file` · `edit_file` (exact unique string replace) · `bash`
+`read_file` · `write_file` · `edit_file` (exact unique string replace) · `glob` · `grep` · `bash`
+
+`glob` and `grep` are pure Python (no ripgrep), read-only so they never prompt, skip
+`.git`/`.venv`/`node_modules`/caches and binary files, and ignore symlinks that point outside
+`WORKDIR`. A glob without `/` matches file names at any depth, so `*.py` finds them all. Their
+descriptions (and `bash`'s) steer the model toward them; it still reaches for `find` now and then.
 
 Every tool failure is returned to the model as `Error: ...` text rather than raised.
 Small models usually self-correct when told what went wrong; a crash teaches them nothing.
@@ -101,4 +106,4 @@ the command before approving, and be sparing with `[a]lways` on `bash`. Real con
 
 ## Not yet
 
-`grep`/`glob` · session persistence · subagents
+session persistence · subagents

@@ -97,3 +97,110 @@ def test_bash_timeout_kills_background_children(agent, monkeypatch, tmp_path):
     assert "timed out" in out
     time.sleep(2.5)
     assert not marker.exists()
+
+
+# --- glob / grep -----------------------------------------------------------
+
+@pytest.fixture
+def tree(agent, tmp_path):
+    """A small project, plus the junk directories that must never show up."""
+    for path, text in {
+        "main.py": "import os\ndef main():\n    return 1\n",
+        "src/app.py": "def handler():\n    # TODO: validate\n    pass\n",
+        "src/deep/util.py": "def helper():\n    return 'Hello'\n",
+        "README.md": "# todo list\n",
+        ".venv/lib/site.py": "def main(): pass\n",
+        "node_modules/x/index.js": "// TODO\n",
+        "pkg.egg-info/PKG-INFO": "TODO\n",
+    }.items():
+        p = tmp_path / path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text)
+    return tmp_path
+
+
+def test_glob_name_pattern_matches_at_any_depth(agent, tree):
+    assert call(agent, "glob", pattern="*.py").splitlines() == [
+        "main.py", "src/app.py", "src/deep/util.py"]
+
+
+def test_glob_double_star_includes_zero_dirs(agent, tree):
+    out = call(agent, "glob", pattern="src/**/*.py").splitlines()
+    assert out == ["src/app.py", "src/deep/util.py"]
+
+
+def test_glob_single_star_stays_in_one_dir(agent, tree):
+    assert call(agent, "glob", pattern="src/*.py").splitlines() == ["src/app.py"]
+
+
+def test_glob_relative_to_path(agent, tree):
+    assert call(agent, "glob", pattern="deep/*.py", path="src").splitlines() == ["src/deep/util.py"]
+
+
+def test_glob_no_match_says_so(agent, tree):
+    assert "No files match" in call(agent, "glob", pattern="*.rs")
+
+
+def test_glob_announces_truncation(agent, tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "MAX_GLOB_RESULTS", 2)
+    for i in range(3):
+        (tmp_path / f"f{i}.txt").write_text("x")
+    assert "[showing 2 of 3 files" in call(agent, "glob", pattern="*.txt")
+
+
+def test_grep_reports_path_and_line(agent, tree):
+    assert call(agent, "grep", pattern=r"def \w+\(").splitlines() == [
+        "main.py:2: def main():", "src/app.py:1: def handler():", "src/deep/util.py:1: def helper():"]
+
+
+def test_grep_skips_junk_dirs(agent, tree):
+    out = call(agent, "grep", pattern="TODO")
+    assert out == "src/app.py:2: # TODO: validate"
+
+
+def test_grep_ignore_case_and_glob_filter(agent, tree):
+    assert call(agent, "grep", pattern="todo", ignore_case=True, glob="*.md") == "README.md:1: # todo list"
+
+
+def test_grep_single_file(agent, tree):
+    assert call(agent, "grep", pattern="Hello", path="src/deep/util.py") == \
+        "src/deep/util.py:2: return 'Hello'"
+
+
+def test_grep_bad_regex_is_explained(agent, tree):
+    assert "Invalid regular expression" in call(agent, "grep", pattern="foo(")
+
+
+def test_grep_skips_binary_files(agent, tmp_path):
+    (tmp_path / "blob.bin").write_bytes(b"\0\1needle\0")
+    (tmp_path / "t.txt").write_text("needle\n")
+    assert call(agent, "grep", pattern="needle") == "t.txt:1: needle"
+
+
+def test_grep_stops_at_the_match_cap(agent, tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "MAX_GREP_MATCHES", 3)
+    (tmp_path / "many.txt").write_text("hit\n" * 10)
+    out = call(agent, "grep", pattern="hit")
+    assert out.count("many.txt:") == 3 and "stopped at 3 matches" in out
+
+
+def test_search_cannot_escape_workdir(agent, tree):
+    assert "outside the working directory" in call(agent, "grep", pattern="x", path="..")
+    assert "outside the working directory" in call(agent, "glob", pattern="*", path="/etc")
+
+
+def test_search_ignores_symlinks_pointing_outside(agent, tmp_path, tmp_path_factory):
+    outside = tmp_path_factory.mktemp("outside") / "secret.txt"
+    outside.write_text("password=hunter2\n")
+    (tmp_path / "link.txt").symlink_to(outside)
+    assert "No matches" in call(agent, "grep", pattern="hunter2")
+    assert "No files match" in call(agent, "glob", pattern="*.txt")
+
+
+def test_search_tools_never_prompt(agent, tree, monkeypatch):
+    def boom(*a):
+        raise AssertionError("a search should not ask for permission")
+    monkeypatch.setattr("builtins.input", boom)
+    agent.permissions = Permissions(yolo=False)
+    call(agent, "glob", pattern="*.py")
+    call(agent, "grep", pattern="def")

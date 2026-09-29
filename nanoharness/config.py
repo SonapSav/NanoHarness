@@ -27,8 +27,9 @@ def system_prompt() -> str:
     """Built on demand so it always names the current WORKDIR."""
     return f"""You are a coding agent working in the directory {WORKDIR}.
 
-You have tools to read, write and edit files, and to run shell commands.
-Use them instead of guessing: read a file before you edit it.
+You have tools to read, write and edit files, find files (glob), search their
+contents (grep), and run shell commands. Use them instead of guessing: read a file
+before you edit it. Prefer glob and grep over find and grep in bash.
 
 Rules:
 - Paths may be relative to the working directory. Never go outside it.

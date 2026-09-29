@@ -1,5 +1,6 @@
 """Tool registry: a JSON schema the model sees, plus a Python function that runs."""
 import os
+import re
 import signal
 import subprocess
 from dataclasses import dataclass
@@ -167,7 +168,9 @@ def edit_file(path, old_string, new_string):
 @tool(
     name="bash",
     description="Run a shell command in the working directory. "
-                "Returns combined stdout and stderr, and the exit code.",
+                "Returns combined stdout and stderr, and the exit code. "
+                "Do not use it to find files or search their contents: use glob and grep, "
+                "which are faster and need no approval.",
     parameters={
         "type": "object",
         "properties": {
@@ -215,3 +218,169 @@ def kill_group(proc):
     # Not communicate(): a process that escaped the group could hold the pipes open forever.
     proc.stdout.close()
     proc.stderr.close()
+
+
+# --- search ----------------------------------------------------------------
+
+# Never worth searching, and big enough (.venv alone is thousands of files) to drown results.
+SKIP_DIRS = {".git", ".hg", ".svn", ".venv", "venv", "node_modules", "__pycache__",
+             ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", ".idea", ".vscode"}
+MAX_GLOB_RESULTS = 200
+MAX_GREP_MATCHES = 100
+MAX_GREP_FILE_BYTES = 2_000_000
+MAX_LINE_CHARS = 200
+
+
+def walk_files(root: Path):
+    """Every file under root, skipping SKIP_DIRS and *.egg-info, never leaving WORKDIR.
+    os.walk does not follow directory symlinks; file symlinks are checked by resolving."""
+    if root.is_file():
+        yield root
+        return
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames
+                             if d not in SKIP_DIRS and not d.endswith(".egg-info"))
+        for name in sorted(filenames):
+            p = Path(dirpath) / name
+            real = p.resolve()
+            if real == config.WORKDIR or config.WORKDIR in real.parents:
+                yield p
+
+
+def glob_regex(pattern: str) -> re.Pattern:
+    """Translate a glob to a regex over /-separated relative paths. `**/` is zero or more
+    directories, `*` and `?` stay within one path segment. (Path.match only learned `**`
+    in 3.13.)"""
+    out, i = [], 0
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif pattern.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif pattern[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        elif pattern[i] == "?":
+            out.append("[^/]")
+            i += 1
+        else:
+            out.append(re.escape(pattern[i]))
+            i += 1
+    return re.compile("".join(out) + r"\Z")
+
+
+def glob_matcher(pattern: str):
+    """A pattern with no '/' matches the file name at any depth, so `*.py` finds all of them."""
+    rx = glob_regex(pattern)
+    if "/" in pattern:
+        return lambda rel: rx.match(rel) is not None
+    return lambda rel: rx.match(rel.rsplit("/", 1)[-1]) is not None
+
+
+def is_binary(p: Path) -> bool:
+    try:
+        with p.open("rb") as f:
+            return b"\0" in f.read(8192)
+    except OSError:
+        return True
+
+
+def rel(p: Path) -> str:
+    return p.relative_to(config.WORKDIR).as_posix()
+
+
+@tool(
+    name="glob",
+    description="Find files by NAME (not by what is inside them; use grep for that). "
+                "`**` matches any number of directories, e.g. "
+                "'src/**/*.py'. A pattern without '/' matches file names at any depth, so "
+                "'*.py' finds every Python file. Skips .git, .venv, node_modules and caches.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "pattern": {"type": "string", "description": "Glob pattern, e.g. '*.py' or 'tests/**/test_*.py'."},
+            "path": {"type": "string", "description": "Directory to search in. Optional, default the working directory."},
+        },
+        "required": ["pattern"],
+    },
+    writes=False,
+    preview=lambda pattern, path=".", **kw: f"glob {pattern} in {path}",
+)
+def glob(pattern, path="."):
+    root = resolve(path)
+    if not root.is_dir():
+        raise ToolError(f"No such directory: {path}")
+    matches = glob_matcher(pattern)
+    # Match against the path relative to `path`, so 'tests/*.py' means what it says from there.
+    found = [rel(p) for p in walk_files(root) if matches(p.relative_to(root).as_posix())]
+    if not found:
+        return f"No files match {pattern!r} in {path}."
+    shown = "\n".join(found[:MAX_GLOB_RESULTS])
+    if len(found) > MAX_GLOB_RESULTS:
+        shown += f"\n\n[showing {MAX_GLOB_RESULTS} of {len(found)} files; use a narrower pattern]"
+    return shown
+
+
+@tool(
+    name="grep",
+    description="Search INSIDE files for a regular expression (Python syntax), e.g. to "
+                "find where a function or class is defined or used. Returns "
+                "matching lines as path:line: text. Skips binary files, .git, .venv, "
+                "node_modules and caches.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "pattern": {"type": "string", "description": "Regular expression, e.g. 'def \\w+' or 'TODO'."},
+            "path": {"type": "string", "description": "File or directory to search. Optional, default the working directory."},
+            "glob": {"type": "string", "description": "Only search files whose name matches this, e.g. '*.py'. Optional."},
+            "ignore_case": {"type": "boolean", "description": "Case-insensitive match. Optional, default false."},
+        },
+        "required": ["pattern"],
+    },
+    writes=False,
+    preview=lambda pattern, path=".", **kw: f"grep {pattern!r} in {path}",
+)
+def grep(pattern, path=".", glob=None, ignore_case=False):
+    try:
+        rx = re.compile(pattern, re.IGNORECASE if ignore_case else 0)
+    except re.error as e:
+        raise ToolError(f"Invalid regular expression {pattern!r}: {e}. "
+                        "Escape special characters like ( ) [ ] . * with a backslash.") from None
+    root = resolve(path)
+    if not root.exists():
+        raise ToolError(f"No such file or directory: {path}")
+    name_ok = glob_matcher(glob) if glob else (lambda r: True)
+
+    hits, files_hit, more = [], set(), False
+    for p in walk_files(root):
+        r = rel(p)
+        if not name_ok(r) or is_binary(p):
+            continue
+        try:
+            if p.stat().st_size > MAX_GREP_FILE_BYTES:
+                continue
+            lines = p.read_text(errors="replace").splitlines()
+        except OSError:
+            continue
+        for n, line in enumerate(lines, start=1):
+            if rx.search(line):
+                if len(hits) == MAX_GREP_MATCHES:
+                    more = True
+                    break
+                text = line.strip()
+                if len(text) > MAX_LINE_CHARS:
+                    text = text[:MAX_LINE_CHARS] + " [...]"
+                hits.append(f"{r}:{n}: {text}")
+                files_hit.add(r)
+        if more:
+            break
+
+    if not hits:
+        return f"No matches for {pattern!r} in {path}" + (f" (files matching {glob!r})." if glob else ".")
+    out = "\n".join(hits)
+    if more:
+        out += (f"\n\n[stopped at {MAX_GREP_MATCHES} matches; narrow the pattern, "
+                "or pass path or glob]")
+    return truncate(out)
