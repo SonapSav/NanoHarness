@@ -43,7 +43,8 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `OLLAMA_HOST` |  `http://100.66.104.56:11434` | Ollama on another machine |
 | `NANO_MODEL` | `aeroadvisor-agent:latest` | whatever `ollama list` shows |
 | `NANO_NUM_CTX` | `49152` | matches the model's Modelfile; sending less silently truncates history |
-| `NANO_THINK` | `0` | `1` turns on Qwen3 reasoning mode |
+| `NANO_THINK` | `0` | `1` turns on Qwen3 reasoning mode (streamed in grey) |
+| `NANO_STREAM` | `1` | `0` prints each reply only once it is complete |
 | `NANO_COMPACT_AT` | `0.75` | fraction of `NANO_NUM_CTX` at which history gets shrunk; the rest is room for the reply |
 | `NANO_MAX_STEPS` | `25` | tool rounds per user turn before giving up |
 | `NANO_WORKDIR` | cwd | the sandbox root; tools refuse to leave it |
@@ -53,7 +54,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | file | role |
 |---|---|
 | `config.py` | tunables and the system prompt |
-| `client.py` | `POST /api/chat` — messages + tool schemas in, assistant message out |
+| `client.py` | `POST /api/chat` — messages + tool schemas in, streamed fragments assembled into one assistant message out |
 | `tools.py` | the registry: JSON schema (what the model sees) + function (what runs) |
 | `permissions.py` | the gate between "the model asked" and "it ran" |
 | `context.py` | keeps the history inside `num_ctx` |
@@ -100,4 +101,4 @@ the command before approving, and be sparing with `[a]lways` on `bash`. Real con
 
 ## Not yet
 
-Streaming · `grep`/`glob` · session persistence · subagents
+`grep`/`glob` · session persistence · subagents

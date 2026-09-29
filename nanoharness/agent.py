@@ -7,9 +7,11 @@ from .tools import REGISTRY, ToolError, schemas
 
 
 class Agent:
-    def __init__(self, permissions: Permissions = None):
+    def __init__(self, permissions: Permissions = None, on_token=None):
         self.messages = [{"role": "system", "content": config.system_prompt()}]
         self.permissions = permissions or Permissions()
+        # on_token(kind, text) shows the reply as it streams; kind "end" closes each reply.
+        self.on_token = on_token
         self.dropped_input = False   # did the last failed turn discard the user's message?
 
     def run_tool(self, call) -> str:
@@ -68,14 +70,16 @@ class Agent:
             self.messages, note = context.fit(self.messages, schemas())
             if note:
                 print(f"\033[90m  ({note})\033[0m")
-            reply = client.chat(self.messages, schemas())
+            reply = client.chat(self.messages, schemas(), on_token=self.on_token)
+            if self.on_token:
+                self.on_token("end", "")
             self.messages.append(reply)
 
             calls = reply.get("tool_calls") or []
             if not calls:
                 return reply.get("content", "").strip()
 
-            if reply.get("content", "").strip():
+            if reply.get("content", "").strip() and not self.on_token:  # else already shown
                 print(f"\033[90m{reply['content'].strip()}\033[0m")
 
             for i, call in enumerate(calls):

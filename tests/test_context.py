@@ -20,7 +20,7 @@ def summarizer(monkeypatch, text="the user wanted a.txt; it was written"):
     """Replace the model with one that only writes summaries, and record the requests."""
     seen = []
 
-    def fake_chat(messages, tools=None):
+    def fake_chat(messages, tools=None, on_token=None):
         seen.append(messages)
         if isinstance(text, BaseException):
             raise text
@@ -119,7 +119,7 @@ def test_dropped_input_survives_compaction(monkeypatch):
     """Compaction rebuilds the list; a failed turn must still drop only the user message."""
     responses = iter([{"role": "assistant", "content": "summary"}, ModelError("down")])
 
-    def fake_chat(messages, tools=None):
+    def fake_chat(messages, tools=None, on_token=None):
         r = next(responses)
         if isinstance(r, BaseException):
             raise r

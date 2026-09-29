@@ -9,6 +9,7 @@ MODEL = os.environ.get("NANO_MODEL", "aeroadvisor-agent:latest")
 NUM_CTX = int(os.environ.get("NANO_NUM_CTX", "49152"))  # matches the Modelfile; do not send less
 TEMPERATURE = float(os.environ.get("NANO_TEMPERATURE", "0.6"))
 THINK = os.environ.get("NANO_THINK", "0") == "1"   # Qwen3 reasoning mode
+STREAM = os.environ.get("NANO_STREAM", "1") == "1"  # print the reply as it is generated
 # Shrink the history once it is estimated past this fraction of NUM_CTX; the rest is room
 # for the reply. See context.py.
 COMPACT_AT = float(os.environ.get("NANO_COMPACT_AT", "0.75"))

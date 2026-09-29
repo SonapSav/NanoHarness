@@ -28,7 +28,8 @@ def main(argv=None):
         yolo="\n  \033[31myolo     permissions disabled\033[0m" if yolo else "",
     ))
 
-    agent = Agent(Permissions(yolo=yolo))
+    printer = StreamPrinter() if config.STREAM else None
+    agent = Agent(Permissions(yolo=yolo), on_token=printer)
 
     while True:
         try:
@@ -42,7 +43,7 @@ def main(argv=None):
         if user_input in ("/exit", "/quit"):
             return 0
         if user_input == "/reset":
-            agent = Agent(agent.permissions)
+            agent = Agent(agent.permissions, agent.on_token)
             print("history cleared")
             continue
         if user_input == "/messages":
@@ -50,14 +51,55 @@ def main(argv=None):
             print(json.dumps(agent.messages, indent=2)[:8000])
             continue
 
+        if printer:
+            printer.reset()
         try:
-            print(agent.turn(user_input) + "\n")
+            answer = agent.turn(user_input)
+            if printer is None or answer != printer.last:  # e.g. "(stopped after ...)"
+                print(answer)
+            print()
         except ModelError as e:
+            if printer:
+                printer.break_line()
             print(f"\033[31m{e}\033[0m")
             print(recovery_hint(agent))
         except KeyboardInterrupt:
             print("\n\033[31minterrupted\033[0m")
             print(recovery_hint(agent))
+
+
+class StreamPrinter:
+    """Shows a reply as it streams: thinking in grey, the answer in plain text.
+    Remembers the last complete reply so the REPL does not print it twice."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.kind = None   # what is mid-line right now: "thinking", "content" or None
+        self.parts = []
+        self.last = None
+
+    def break_line(self):
+        if self.kind:
+            print()
+        self.kind = None
+
+    def __call__(self, kind, text):
+        if kind == "end":
+            self.break_line()
+            self.last = "".join(self.parts).strip()
+            self.parts = []
+            return
+        if self.kind and kind != self.kind:
+            print()   # thinking is over; the answer starts on its own line
+        self.kind = kind
+        if kind == "thinking":
+            text = f"\033[90m{text}\033[0m"
+        else:
+            self.parts.append(text)
+        sys.stdout.write(text)
+        sys.stdout.flush()
 
 
 def recovery_hint(agent):

@@ -17,7 +17,7 @@ def script(monkeypatch, *steps):
     """Make client.chat return (or raise) each step in order."""
     steps = iter(steps)
 
-    def fake_chat(messages, tools=None):
+    def fake_chat(messages, tools=None, on_token=None):
         step = next(steps)
         if isinstance(step, BaseException):
             raise step
