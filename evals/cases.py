@@ -162,6 +162,13 @@ CASES = [
          "Use the task tool to find out where this app saves its data and in what format.",
          [called("task"), answer_matches(r"json"), answer_matches(r"miniapp")],
          files=MINIAPP),
+    # Asked to delegate on a project worth delegating: the subagent does the searching.
+    Case("delegate_big_project", "delegate",
+         "Use the task tool to find out how the late fee on an overdue balance is "
+         "calculated and which setting controls the grace period. Give the actual values.",
+         [called("task"), answer_matches(r"\b12\b"), answer_matches(r"1\.5\s*%|0\.015"),
+          context_under(10_000)],
+         files=BIG),
     # Unprompted, on a project too big to read: judged by what delegation is FOR, a small
     # main history, not by whether `task` was called. (The old delegate_unprompted asked
     # it on 4 tiny files, where reading them directly is the sensible choice.)
