@@ -44,6 +44,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `NANO_MODEL` | `aeroadvisor-agent:latest` | whatever `ollama list` shows |
 | `NANO_NUM_CTX` | `49152` | matches the model's Modelfile; sending less silently truncates history |
 | `NANO_THINK` | `0` | `1` turns on Qwen3 reasoning mode |
+| `NANO_COMPACT_AT` | `0.75` | fraction of `NANO_NUM_CTX` at which history gets shrunk; the rest is room for the reply |
 | `NANO_MAX_STEPS` | `25` | tool rounds per user turn before giving up |
 | `NANO_WORKDIR` | cwd | the sandbox root; tools refuse to leave it |
 
@@ -55,6 +56,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `client.py` | `POST /api/chat` — messages + tool schemas in, assistant message out |
 | `tools.py` | the registry: JSON schema (what the model sees) + function (what runs) |
 | `permissions.py` | the gate between "the model asked" and "it ran" |
+| `context.py` | keeps the history inside `num_ctx` |
 | `agent.py` | the loop |
 | `cli.py` | REPL |
 
@@ -68,6 +70,18 @@ repeat up to MAX_STEPS:
     if no tool calls: return reply.content
     for each call: check permission, run it, append the result as a tool message
 ```
+
+## Context
+
+Past `num_ctx`, Ollama silently drops the oldest tokens, system prompt first. So before
+every request `context.py` estimates the size (chars / 3, measured on this model) and, once
+it passes `NANO_COMPACT_AT`, shrinks the history, cheapest step first:
+
+1. shorten long tool outputs from earlier turns
+2. replace earlier turns with a model-written summary
+3. shorten older tool outputs in the current turn, keeping the latest two
+
+The system prompt and the current request are never touched. A grey line says what happened.
 
 ## Tools
 
@@ -86,4 +100,4 @@ the command before approving, and be sparing with `[a]lways` on `bash`. Real con
 
 ## Not yet
 
-Streaming · context compaction · `grep`/`glob` · session persistence · subagents
+Streaming · `grep`/`glob` · session persistence · subagents

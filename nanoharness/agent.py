@@ -1,7 +1,7 @@
 """The loop. Everything else exists to serve these ~40 lines."""
 import json
 
-from . import client, config
+from . import client, config, context
 from .permissions import Denied, Permissions
 from .tools import REGISTRY, ToolError, schemas
 
@@ -10,6 +10,7 @@ class Agent:
     def __init__(self, permissions: Permissions = None):
         self.messages = [{"role": "system", "content": config.system_prompt()}]
         self.permissions = permissions or Permissions()
+        self.dropped_input = False   # did the last failed turn discard the user's message?
 
     def run_tool(self, call) -> str:
         """Execute one tool call. Every failure comes back as text, never as a crash:
@@ -48,20 +49,25 @@ class Agent:
 
     def turn(self, user_input: str):
         """One user message in, one final assistant message out (via N tool rounds)."""
-        start = len(self.messages)
-        self.messages.append({"role": "user", "content": user_input})
+        user_message = {"role": "user", "content": user_input}
+        self.messages.append(user_message)
+        self.dropped_input = False
         try:
             return self._loop()
         except BaseException:  # ModelError, KeyboardInterrupt
             # If the model never answered, drop the user message so a retry is not a duplicate.
             # Once it has, keep everything: tools may have changed the disk, and the model
-            # needs that record.
-            if len(self.messages) == start + 1:
-                del self.messages[start:]
+            # needs that record. (Compaction may have rebuilt the list, hence `is`, not indices.)
+            if self.messages[-1] is user_message:
+                self.messages.pop()
+                self.dropped_input = True
             raise
 
     def _loop(self):
         for step in range(config.MAX_STEPS):
+            self.messages, note = context.fit(self.messages, schemas())
+            if note:
+                print(f"\033[90m  ({note})\033[0m")
             reply = client.chat(self.messages, schemas())
             self.messages.append(reply)
 

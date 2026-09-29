@@ -50,21 +50,20 @@ def main(argv=None):
             print(json.dumps(agent.messages, indent=2)[:8000])
             continue
 
-        before = len(agent.messages)
         try:
             print(agent.turn(user_input) + "\n")
         except ModelError as e:
             print(f"\033[31m{e}\033[0m")
-            print(recovery_hint(agent, before))
+            print(recovery_hint(agent))
         except KeyboardInterrupt:
             print("\n\033[31minterrupted\033[0m")
-            print(recovery_hint(agent, before))
+            print(recovery_hint(agent))
 
 
-def recovery_hint(agent, before):
+def recovery_hint(agent):
     """After a failed turn, say whether the message survived. Agent.turn drops it
     only if the model never answered."""
-    if len(agent.messages) == before:
+    if agent.dropped_input:
         return "\033[90m(your message was not kept; send it again to retry)\033[0m\n"
     return "\033[90m(progress so far is kept; say \"continue\" to resume)\033[0m\n"
 
