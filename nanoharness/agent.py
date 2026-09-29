@@ -3,14 +3,19 @@ import json
 
 from . import client, config, context
 from .permissions import CURRENT, Denied, Permissions
-from .tools import REGISTRY, ToolError, schemas
+from .tools import REGISTRY, ToolError, file_tree, schemas
+
+
+def with_file_tree(prompt: str) -> str:
+    return (prompt + "\nFiles in the working directory when this session started (skips .git, "
+            ".venv and caches; it goes stale as files change):\n" + file_tree() + "\n")
 
 
 class Agent:
     def __init__(self, permissions: Permissions = None, on_token=None, session=None, messages=None,
                  tools=None, system=None, max_steps=None, depth=0):
         # A resumed history gets today's system prompt: the code may have changed since.
-        system = system or config.system_prompt()
+        system = system or with_file_tree(config.system_prompt())
         self.messages = [{"role": "system", "content": system}] + (messages or [])[1:]
         self.tools = list(tools or REGISTRY)   # names this agent may call; a subagent gets fewer
         self.max_steps = max_steps or config.MAX_STEPS

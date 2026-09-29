@@ -90,7 +90,7 @@ def test_resume_restores_history_with_a_fresh_system_prompt(monkeypatch):
     sess, history = session.load(first.session.id)
     stale = [{"role": "system", "content": "OLD PROMPT"}] + history[1:]
     resumed = Agent(session=sess, messages=stale)
-    assert resumed.messages[0]["content"] == config.system_prompt()
+    assert resumed.messages[0]["content"].startswith(config.system_prompt())
     assert resumed.messages[1:] == first.messages[1:]
 
 

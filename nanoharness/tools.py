@@ -288,6 +288,18 @@ def glob_matcher(pattern: str):
     return lambda rel: rx.match(rel.rsplit("/", 1)[-1]) is not None
 
 
+def file_tree(limit: int = 100) -> str:
+    """The project's files, for the system prompt, so the model need not start every task
+    with `ls -la` (it did in 9/10 delegation eval runs, then kept exploring itself)."""
+    files = [rel(p) for p in walk_files(config.WORKDIR)]
+    if not files:
+        return "(empty)"
+    shown = "\n".join(files[:limit])
+    if len(files) > limit:
+        shown += f"\n... and {len(files) - limit} more (use glob to find them)"
+    return shown
+
+
 def is_binary(p: Path) -> bool:
     try:
         with p.open("rb") as f:
