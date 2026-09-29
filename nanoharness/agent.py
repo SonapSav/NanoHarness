@@ -7,9 +7,11 @@ from .tools import REGISTRY, ToolError, schemas
 
 
 class Agent:
-    def __init__(self, permissions: Permissions = None, on_token=None):
-        self.messages = [{"role": "system", "content": config.system_prompt()}]
+    def __init__(self, permissions: Permissions = None, on_token=None, session=None, messages=None):
+        # A resumed history gets today's system prompt: the code may have changed since.
+        self.messages = [{"role": "system", "content": config.system_prompt()}] + (messages or [])[1:]
         self.permissions = permissions or Permissions()
+        self.session = session   # saved after every message when set
         # on_token(kind, text) shows the reply as it streams; kind "end" closes each reply.
         self.on_token = on_token
         self.dropped_input = False   # did the last failed turn discard the user's message?
@@ -48,12 +50,22 @@ class Agent:
 
     def add_tool_result(self, name: str, content: str):
         self.messages.append({"role": "tool", "tool_name": name, "content": content})
+        self.save()
+
+    def save(self):
+        if self.session is None:
+            return
+        try:
+            self.session.save(self.messages)
+        except OSError as e:  # a full disk should not kill the conversation
+            print(f"\033[31m  (could not save session: {e})\033[0m")
 
     def turn(self, user_input: str):
         """One user message in, one final assistant message out (via N tool rounds)."""
         user_message = {"role": "user", "content": user_input}
         self.messages.append(user_message)
         self.dropped_input = False
+        self.save()
         try:
             return self._loop()
         except BaseException:  # ModelError, KeyboardInterrupt
@@ -64,6 +76,8 @@ class Agent:
                 self.messages.pop()
                 self.dropped_input = True
             raise
+        finally:
+            self.save()
 
     def _loop(self):
         for step in range(config.MAX_STEPS):
@@ -74,6 +88,7 @@ class Agent:
             if self.on_token:
                 self.on_token("end", "")
             self.messages.append(reply)
+            self.save()
 
             calls = reply.get("tool_calls") or []
             if not calls:

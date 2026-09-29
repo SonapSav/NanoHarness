@@ -1,35 +1,57 @@
 """Deliberately dumb REPL. Read a line, run a turn, print the answer."""
+import argparse
 import sys
 
-from . import config
+from . import config, session
 from .agent import Agent
 from .client import ModelError
 from .permissions import Permissions
+from .session import Session, SessionError
 
 BANNER = """\033[1mNanoHarness\033[0m
   model    {model}
   host     {host}
   workdir  {workdir}
-  ctx      {ctx}{yolo}
+  ctx      {ctx}
+  session  {session}{yolo}
 
-  /exit  quit      /reset  clear history      /messages  dump raw history
+  /exit  quit      /reset  new session      /sessions  list saved      /messages  dump raw history
 """
 
 
+def parse_args(argv):
+    p = argparse.ArgumentParser(prog="nanoharness", description="A coding agent harness, stdlib only.")
+    p.add_argument("--yolo", action="store_true", help="skip permission prompts")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("-c", "--continue", dest="cont", action="store_true",
+                   help="resume the latest session in this directory")
+    g.add_argument("--resume", nargs="?", const="", metavar="ID",
+                   help="resume a session; without ID, pick one from a list")
+    return p.parse_args(argv)
+
+
 def main(argv=None):
-    argv = sys.argv[1:] if argv is None else argv
-    yolo = "--yolo" in argv
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    try:
+        sess, history = start_session(args)
+    except SessionError as e:
+        print(f"\033[31m{e}\033[0m")
+        return 1
 
     print(BANNER.format(
         model=config.MODEL,
         host=config.OLLAMA_HOST,
         workdir=config.WORKDIR,
         ctx=config.NUM_CTX,
-        yolo="\n  \033[31myolo     permissions disabled\033[0m" if yolo else "",
+        session=sess.id,
+        yolo="\n  \033[31myolo     permissions disabled\033[0m" if args.yolo else "",
     ))
+    if history:
+        print(f"\033[90mresumed · {len(history)} messages · last request: "
+              f"{last_request(history)!r}\033[0m\n")
 
     printer = StreamPrinter() if config.STREAM else None
-    agent = Agent(Permissions(yolo=yolo), on_token=printer)
+    agent = Agent(Permissions(yolo=args.yolo), on_token=printer, session=sess, messages=history)
 
     while True:
         try:
@@ -43,8 +65,11 @@ def main(argv=None):
         if user_input in ("/exit", "/quit"):
             return 0
         if user_input == "/reset":
-            agent = Agent(agent.permissions, agent.on_token)
-            print("history cleared")
+            agent = Agent(agent.permissions, agent.on_token, session=Session())
+            print(f"new session {agent.session.id} (the old one stays saved)")
+            continue
+        if user_input == "/sessions":
+            print(format_sessions(session.list_sessions(), current=agent.session.id))
             continue
         if user_input == "/messages":
             import json
@@ -100,6 +125,54 @@ class StreamPrinter:
             self.parts.append(text)
         sys.stdout.write(text)
         sys.stdout.flush()
+
+
+def start_session(args):
+    """A fresh session, unless -c or --resume asked for a saved one."""
+    id = None
+    if args.cont:
+        id = session.latest()
+        if id is None:
+            print("no saved sessions for this directory; starting a new one")
+    elif args.resume is not None:
+        id = args.resume or pick_session()
+    if id:
+        return session.load(id)
+    return Session(), None
+
+
+def pick_session():
+    sessions = session.list_sessions()
+    if not sessions:
+        print("no saved sessions for this directory; starting a new one")
+        return None
+    print(format_sessions(sessions, numbered=True))
+    try:
+        choice = input("resume which? [number or id, enter for a new session] ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return None
+    if choice.isdigit() and 1 <= int(choice) <= len(sessions):
+        return sessions[int(choice) - 1]["id"]
+    return choice or None
+
+
+def format_sessions(sessions, numbered=False, current=None):
+    if not sessions:
+        return "no saved sessions for this directory"
+    rows = []
+    for n, s in enumerate(sessions, start=1):
+        mark = f"{n:>3}  " if numbered else ("  * " if s["id"] == current else "    ")
+        rows.append(f"{mark}{s['id']:<18} {s['updated'].replace('T', ' ')}  "
+                    f"{s['messages']:>4} msgs  {s['title']}")
+    return "\n".join(rows)
+
+
+def last_request(messages) -> str:
+    for m in reversed(messages):
+        if m["role"] == "user":
+            return " ".join(m["content"].split())[:70]
+    return ""
 
 
 def recovery_hint(agent):

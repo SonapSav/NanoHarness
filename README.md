@@ -20,7 +20,15 @@ Then, from whatever directory you want the agent to work in:
 cd ~/some/scratch/dir
 nanoharness              # that directory becomes the sandbox root
 nanoharness --yolo       # skip permission prompts
+nanoharness -c           # continue the latest session in this directory
+nanoharness --resume     # pick a saved session from a list (or --resume ID)
 ```
+
+Every conversation is saved after each message to `~/.local/share/nanoharness/sessions/`
+(one `0600` JSON file each; outside the project so the agent's tools can't touch it). A
+session resumes only in the directory it started in, with today's system prompt. `[a]lways`
+approvals are deliberately not saved. `/sessions` lists them, `/reset` starts a new one.
+Nothing cleans old sessions up; delete the files when you like.
 
 No activation needed — the entry point's shebang points straight at `.venv/bin/python3`.
 The install is editable, so source edits take effect immediately. The command is
@@ -48,6 +56,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `NANO_COMPACT_AT` | `0.75` | fraction of `NANO_NUM_CTX` at which history gets shrunk; the rest is room for the reply |
 | `NANO_MAX_STEPS` | `25` | tool rounds per user turn before giving up |
 | `NANO_WORKDIR` | cwd | the sandbox root; tools refuse to leave it |
+| `NANO_SESSION_DIR` | `~/.local/share/nanoharness/sessions` | keep saved conversations elsewhere |
 
 ## Shape
 
@@ -58,6 +67,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `tools.py` | the registry: JSON schema (what the model sees) + function (what runs) |
 | `permissions.py` | the gate between "the model asked" and "it ran" |
 | `context.py` | keeps the history inside `num_ctx` |
+| `session.py` | saves and resumes conversations |
 | `agent.py` | the loop |
 | `cli.py` | REPL |
 
@@ -106,4 +116,4 @@ the command before approving, and be sparing with `[a]lways` on `bash`. Real con
 
 ## Not yet
 
-session persistence · subagents
+subagents

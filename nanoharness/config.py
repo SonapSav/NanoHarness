@@ -22,6 +22,12 @@ HTTP_TIMEOUT = int(os.environ.get("NANO_HTTP_TIMEOUT", "300"))
 # The sandbox root. Every path a tool touches must resolve inside this.
 WORKDIR = Path(os.environ.get("NANO_WORKDIR", os.getcwd())).resolve()
 
+# Saved conversations. Outside WORKDIR on purpose: the agent's tools cannot touch them.
+SESSION_DIR = Path(os.environ.get(
+    "NANO_SESSION_DIR",
+    Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "nanoharness/sessions",
+)).expanduser()
+
 
 def system_prompt() -> str:
     """Built on demand so it always names the current WORKDIR."""
