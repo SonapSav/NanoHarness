@@ -1,4 +1,6 @@
 """Tool registry: a JSON schema the model sees, plus a Python function that runs."""
+import os
+import signal
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -177,17 +179,39 @@ def edit_file(path, old_string, new_string):
     preview=lambda command, **kw: f"run: {command}",
 )
 def bash(command):
+    # Own process group, so a timeout or Ctrl-C kills everything the shell started,
+    # not just the shell. subprocess.run's timeout would leave `sleep 999 &` running.
+    proc = subprocess.Popen(
+        command,
+        shell=True,
+        cwd=config.WORKDIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
     try:
-        proc = subprocess.run(
-            command,
-            shell=True,
-            cwd=config.WORKDIR,
-            capture_output=True,
-            text=True,
-            timeout=config.BASH_TIMEOUT,
-        )
+        stdout, stderr = proc.communicate(timeout=config.BASH_TIMEOUT)
     except subprocess.TimeoutExpired:
-        raise ToolError(f"Command timed out after {config.BASH_TIMEOUT}s.") from None
+        kill_group(proc)
+        raise ToolError(
+            f"Command timed out after {config.BASH_TIMEOUT}s and was killed, "
+            "along with anything it started."
+        ) from None
+    except BaseException:  # KeyboardInterrupt: the new group no longer gets the terminal's SIGINT
+        kill_group(proc)
+        raise
 
-    out = (proc.stdout + proc.stderr).strip() or "(no output)"
+    out = (stdout + stderr).strip() or "(no output)"
     return truncate(f"exit code: {proc.returncode}\n\n{out}")
+
+
+def kill_group(proc):
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    proc.wait()
+    # Not communicate(): a process that escaped the group could hold the pipes open forever.
+    proc.stdout.close()
+    proc.stderr.close()

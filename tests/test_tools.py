@@ -1,4 +1,6 @@
 """Offline tests: no model, no network. Every one of these is a bug we actually hit."""
+import time
+
 import pytest
 
 from nanoharness import config, tools
@@ -85,3 +87,13 @@ def test_reads_never_prompt(agent, monkeypatch):
     monkeypatch.setattr("builtins.input", boom)
     agent.permissions = Permissions(yolo=False)
     assert "x" in call(agent, "read_file", path="r.txt")
+
+
+def test_bash_timeout_kills_background_children(agent, monkeypatch, tmp_path):
+    """Regression: the timeout killed only the shell, leaving its children running."""
+    monkeypatch.setattr(config, "BASH_TIMEOUT", 1)
+    marker = tmp_path / "survived"
+    out = call(agent, "bash", command=f"(sleep 2; touch {marker}) & wait")
+    assert "timed out" in out
+    time.sleep(2.5)
+    assert not marker.exists()
