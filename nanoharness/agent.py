@@ -2,7 +2,7 @@
 import json
 
 from . import client, config, context
-from .permissions import Denied, Permissions
+from .permissions import CURRENT, Denied, Permissions
 from .tools import REGISTRY, ToolError, schemas
 
 
@@ -42,8 +42,9 @@ class Agent:
         if tool is None:
             return f"Error: no such tool {name!r}. Available tools: {', '.join(self.tools)}."
 
+        token = CURRENT.set(self.permissions)
         try:
-            self.permissions.check(tool, args)
+            self.permissions.check(tool, args, who="subagent: " if self.depth else "")
             return tool.fn(**args)
         except Denied as e:
             return f"Error: {e}"
@@ -53,6 +54,8 @@ class Agent:
             return f"Error: bad arguments for {name}: {e}"
         except Exception as e:  # never let a tool take the REPL down
             return f"Error: {name} failed unexpectedly: {type(e).__name__}: {e}"
+        finally:
+            CURRENT.reset(token)
 
     def add_tool_result(self, name: str, content: str):
         self.messages.append({"role": "tool", "tool_name": name, "content": content})

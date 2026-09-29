@@ -3,7 +3,14 @@
 Reads run freely. Anything that writes to disk or runs a command asks first,
 with a per-session 'always allow this tool' escape hatch.
 """
+from contextvars import ContextVar
+
 from .tools import Tool
+
+# The Permissions of the agent whose tool is running right now. A subagent started by the
+# task tool picks this up, so its writes go through the same gate (same yolo, same
+# [a]lways set) as the agent that started it.
+CURRENT: ContextVar["Permissions"] = ContextVar("current_permissions")
 
 
 class Denied(Exception):
@@ -15,7 +22,7 @@ class Permissions:
         self.yolo = yolo              # --yolo: approve everything, for trusted loops
         self.always: set[str] = set()  # tool names approved for the rest of the session
 
-    def check(self, tool: Tool, args: dict):
+    def check(self, tool: Tool, args: dict, who: str = ""):
         if self.yolo or not tool.writes or tool.name in self.always:
             return
 
@@ -24,7 +31,7 @@ class Permissions:
         except TypeError:
             preview = f"{tool.name}({args})"
 
-        print(f"\n  \033[33m{preview}\033[0m")
+        print(f"\n  \033[33m{who}{preview}\033[0m")
         answer = input("  allow? [y]es / [n]o / [a]lways for this tool: ").strip().lower()
 
         if answer.startswith("a"):

@@ -110,12 +110,22 @@ Small models usually self-correct when told what went wrong; a crash teaches the
 The wording matters: terse errors let this model narrate intent as fact, so denials and
 failures say explicitly that nothing changed.
 
-`task` hands a research question to a **subagent**: a fresh agent with its own empty history
-and only `read_file`/`glob`/`grep`, so it never prompts, cannot change anything and cannot start
-subagents of its own. Only its final report comes back; the files it read stay out of the main
-history (in a live run: ~2k tokens with `task` against ~12k reading the same files directly). It
-gets `NANO_SUBAGENT_MAX_STEPS` rounds, then is asked for a partial report. The model rarely
-delegates on its own, so ask for it ("use task to find out ...").
+`task` hands work to a **subagent**: a fresh agent with its own empty history. Only its final
+report comes back; the files it read stay out of the main history (in a live run: ~2k tokens
+with `task` against ~12k reading the same files directly). It cannot see the conversation and
+cannot start subagents of its own. It gets `NANO_SUBAGENT_MAX_STEPS` rounds, then is asked
+for a partial report.
+
+- **Research** (default): only `read_file`/`glob`/`grep`, so it never prompts and cannot
+  change anything.
+- **`write=true`**: also `write_file`/`edit_file`/`bash`. Its writes go through the *same*
+  permission gate as the main agent: they prompt, labelled `subagent:`, unless you run
+  `--yolo` or already chose `[a]lways` for that tool. The harness, not the subagent, appends
+  `[harness: files changed by the subagent: ...]` from the calls that actually succeeded, so
+  the main agent doesn't have to take its word. `bash` effects are counted, not tracked.
+
+The model rarely delegates on its own, so ask for it ("use task to find out ...", "use task
+with write=true to ...").
 
 ### The `bash` sandbox
 
@@ -147,6 +157,11 @@ your home directory (nvm, pyenv) are hidden too; expose them read-only with
 
 For unattended use, set `NANO_SANDBOX=on` so a broken bwrap fails closed.
 
+Anything installed during a command is gone by the next one (`$HOME` is wiped, `/usr` is
+read-only). Keep a project's dev tools in a venv inside it (`python3 -m venv .venv`), where
+the sandbox can see and keep them.
+
 ## Not yet
 
-Subagents that can write (they would need their own approval story)
+An eval set: prompt changes (e.g. getting the model to delegate unprompted) are currently
+judged by eye on a handful of live runs.

@@ -27,7 +27,7 @@ def script(monkeypatch, *steps):
     steps, seen = iter(steps), []
 
     def fake_chat(messages, tools=None, on_token=None):
-        who = "sub" if "research subagent" in messages[0]["content"] else "main"
+        who = "sub" if "You are a subagent" in messages[0]["content"] else "main"
         seen.append((who, [t["function"]["name"] for t in tools or []], list(messages)))
         step = next(steps)
         if isinstance(step, BaseException):
@@ -114,3 +114,70 @@ def test_interrupt_inside_subagent_is_recorded_in_main(agent, monkeypatch):
         agent.turn("go")
     assert agent.messages[-1]["tool_name"] == "task"
     assert "interrupted" in agent.messages[-1]["content"]
+
+
+# --- write=true ------------------------------------------------------------
+
+def test_writer_gets_write_tools_but_still_cannot_recurse(agent, monkeypatch):
+    seen = script(monkeypatch, calls("task", prompt="fix it", write=True), say("done"), say("ok"))
+    agent.permissions = Permissions(yolo=True)
+    agent.turn("go")
+    assert seen[1][1] == ["read_file", "write_file", "edit_file", "bash", "glob", "grep"]
+
+
+def test_writer_prompts_through_the_parents_gate(agent, monkeypatch, tmp_path, capsys):
+    answers = iter(["y"])
+    monkeypatch.setattr("builtins.input", lambda *a: next(answers))
+    script(monkeypatch,
+           calls("task", prompt="make a.txt", write=True),
+           calls("write_file", path="a.txt", content="hi"),
+           say("wrote a.txt"),
+           say("ok"))
+    agent.turn("go")
+    assert (tmp_path / "a.txt").read_text() == "hi"
+    assert "subagent: write a.txt" in capsys.readouterr().out
+
+
+def test_writer_denied_changes_nothing(agent, monkeypatch, tmp_path):
+    monkeypatch.setattr("builtins.input", lambda *a: "n")
+    script(monkeypatch,
+           calls("task", prompt="make a.txt", write=True),
+           calls("write_file", path="a.txt", content="hi"),
+           say("the user denied it"),
+           say("ok"))
+    agent.turn("go")
+    assert not (tmp_path / "a.txt").exists()
+    assert "files changed by the subagent: none" in agent.messages[-2]["content"]
+
+
+def test_parents_always_carries_into_the_subagent(agent, monkeypatch, tmp_path):
+    agent.permissions.always.add("write_file")      # approved earlier in the session
+    script(monkeypatch,
+           calls("task", prompt="make a.txt", write=True),
+           calls("write_file", path="a.txt", content="hi"),
+           say("done"),
+           say("ok"))
+    agent.turn("go")                                 # no_prompts fixture: would raise
+    assert (tmp_path / "a.txt").exists()
+
+
+def test_harness_lists_real_changes_not_claimed_ones(agent, monkeypatch, tmp_path):
+    """The subagent claims two files; only one write succeeded. The note says one."""
+    agent.permissions = Permissions(yolo=True)
+    script(monkeypatch,
+           calls("task", prompt="edit", write=True),
+           calls("write_file", path="real.txt", content="x"),
+           calls("edit_file", path="missing.txt", old_string="a", new_string="b"),  # fails
+           calls("bash", command="true"),
+           say("I changed real.txt and missing.txt"),
+           say("ok"))
+    agent.turn("go")
+    report = agent.messages[-2]["content"]
+    assert report.startswith("I changed real.txt and missing.txt")
+    assert "files changed by the subagent: real.txt; bash commands run: 1" in report
+
+
+def test_research_subagent_has_no_change_note(agent, monkeypatch):
+    script(monkeypatch, calls("task", prompt="look"), say("found it"), say("ok"))
+    agent.turn("go")
+    assert agent.messages[-2]["content"] == "found it"

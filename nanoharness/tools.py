@@ -399,23 +399,28 @@ def grep(pattern, path=".", glob=None, ignore_case=False):
 
 @tool(
     name="task",
-    description="Delegate a research question to a subagent with a fresh, empty context. "
-                "It can use read_file, glob and grep (it cannot change files or run commands) "
-                "and returns only its final report, so the files it reads do not fill up your "
-                "context. Use it for questions that need many files read, e.g. 'how is X "
-                "implemented' or 'find every place that does Y'. It cannot see this "
-                "conversation: write a complete, self-contained instruction.",
+    description="Delegate work to a subagent with a fresh, empty context. Only its final "
+                "report comes back, so the files it reads do not fill up your context. "
+                "By default it can only read and search (read_file, glob, grep): use that for "
+                "questions that need many files read, e.g. 'how is X implemented'. With "
+                "write=true it can also write_file, edit_file and run bash, for a "
+                "self-contained change; its writes need the user's approval like yours, and "
+                "the report ends with the list of files it actually changed. It cannot see "
+                "this conversation: write a complete, self-contained instruction.",
     parameters={
         "type": "object",
         "properties": {
             "prompt": {"type": "string",
                        "description": "The full task, including what to report back."},
+            "write": {"type": "boolean",
+                      "description": "Allow the subagent to change files and run commands. "
+                                     "Optional, default false."},
         },
         "required": ["prompt"],
     },
-    writes=False,   # its tools are read-only
-    preview=lambda prompt="", **kw: f"task: {prompt[:80]}",
+    writes=False,   # the task call itself changes nothing; a writer's own writes are gated
+    preview=lambda prompt="", write=False, **kw: f"task{' (write)' if write else ''}: {prompt[:80]}",
 )
-def task(prompt):
+def task(prompt, write=False):
     from . import subagent   # lazy: subagent imports agent, which imports this module
-    return truncate(subagent.run(prompt))
+    return truncate(subagent.run(prompt, write=bool(write)))
