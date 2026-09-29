@@ -117,13 +117,36 @@ history (in a live run: ~2k tokens with `task` against ~12k reading the same fil
 gets `NANO_SUBAGENT_MAX_STEPS` rounds, then is asked for a partial report. The model rarely
 delegates on its own, so ask for it ("use task to find out ...").
 
-**`bash` is not sandboxed.** The file tools refuse to resolve outside `WORKDIR`, but
-`bash` runs with your full user privileges and only starts in `WORKDIR` — `cat > ~/.bashrc`
-would go straight through. The permission prompt is the only thing standing there, so read
-the command before approving, and be sparing with `[a]lways` on `bash`. Real containment
-(`bwrap`, bind-mounting only `WORKDIR`) is a stage-3 job and required before unattended use.
+### The `bash` sandbox
+
+`bash` runs inside [bubblewrap](https://github.com/containers/bubblewrap) (`apt install
+bubblewrap`). It is an allow-list: the sandbox starts empty and gets only
+
+| inside | access |
+|---|---|
+| `/usr`, `/etc`, `/opt` (+ the `/bin` `/lib` `/lib64` `/sbin` links) | read-only |
+| `WORKDIR` | read-write |
+| `/tmp`, `$HOME` | empty, wiped after every command |
+| `/dev` | minimal: `null`, `random`, `tty`, ... no disks |
+
+Everything else (`/home` with your keys and tokens, `/run` with `docker.sock` and keyrings,
+`/media`, `/mnt`, `/var`, other mounts) does not exist inside. The environment is cleared to
+`PATH`, locale and `TERM`, so tokens don't leak in. Each command gets its own PID namespace
+and dies with the harness. The banner's `sandbox` line says what is in force.
+
+It does **not** stop writes inside `WORKDIR` (`rm -rf .` still works; the permission prompt
+is the gate for that), or network access unless `NANO_SANDBOX_NET=0`. Tools that live in
+your home directory (nvm, pyenv) are hidden too; expose them read-only with
+`NANO_SANDBOX_RO_PATHS=~/.nvm:~/.pyenv`.
+
+| var | default | |
+|---|---|---|
+| `NANO_SANDBOX` | `auto` | `auto`: sandbox if bwrap works, else warn in red and run unsandboxed · `on`: refuse to run `bash` without it · `off`: full user privileges |
+| `NANO_SANDBOX_NET` | `1` | `0` cuts the network inside the sandbox |
+| `NANO_SANDBOX_RO_PATHS` | | extra `:`-separated read-only paths |
+
+For unattended use, set `NANO_SANDBOX=on` so a broken bwrap fails closed.
 
 ## Not yet
 
-Subagents that can write (they would need their own approval story) · a `bwrap` sandbox
-for `bash` (required before unattended use)
+Subagents that can write (they would need their own approval story)

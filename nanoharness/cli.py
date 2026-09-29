@@ -2,7 +2,7 @@
 import argparse
 import sys
 
-from . import config, session
+from . import config, sandbox, session
 from .agent import Agent
 from .client import ModelError
 from .permissions import Permissions
@@ -13,7 +13,8 @@ BANNER = """\033[1mNanoHarness\033[0m
   host     {host}
   workdir  {workdir}
   ctx      {ctx}
-  session  {session}{yolo}
+  session  {session}
+  sandbox  {sandbox}{yolo}
 
   /exit  quit      /reset  new session      /sessions  list saved      /messages  dump raw history
 """
@@ -44,6 +45,7 @@ def main(argv=None):
         workdir=config.WORKDIR,
         ctx=config.NUM_CTX,
         session=sess.id,
+        sandbox=sandbox_line(),
         yolo="\n  \033[31myolo     permissions disabled\033[0m" if args.yolo else "",
     ))
     if history:
@@ -125,6 +127,11 @@ class StreamPrinter:
             self.parts.append(text)
         sys.stdout.write(text)
         sys.stdout.flush()
+
+
+def sandbox_line():
+    line = sandbox.status()
+    return line if line.startswith("bwrap:") else f"\033[31m{line}\033[0m"
 
 
 def start_session(args):

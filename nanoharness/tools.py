@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import config
+from . import config, sandbox
 
 
 class ToolError(Exception):
@@ -169,8 +169,10 @@ def edit_file(path, old_string, new_string):
 
 @tool(
     name="bash",
-    description="Run a shell command in the working directory. "
+    description="Run a bash command in the working directory. "
                 "Returns combined stdout and stderr, and the exit code. "
+                "Usually sandboxed: only the working directory is writable, the home "
+                "directory and /tmp start empty and are wiped after each command. "
                 "Do not use it to find files or search their contents: use glob and grep, "
                 "which are faster and need no approval.",
     parameters={
@@ -184,15 +186,20 @@ def edit_file(path, old_string, new_string):
     preview=lambda command, **kw: f"run: {command}",
 )
 def bash(command):
+    try:
+        sandboxed = sandbox.active()
+    except sandbox.SandboxUnavailable as e:
+        raise ToolError(f"{e}. The command did NOT run.") from None
+    argv = sandbox.argv(command) if sandboxed else ["/bin/bash", "-c", command]
     # Own process group, so a timeout or Ctrl-C kills everything the shell started,
     # not just the shell. subprocess.run's timeout would leave `sleep 999 &` running.
     proc = subprocess.Popen(
-        command,
-        shell=True,
+        argv,
         cwd=config.WORKDIR,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        errors="replace",   # binary output must not crash the tool
         start_new_session=True,
     )
     try:

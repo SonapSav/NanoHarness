@@ -17,6 +17,17 @@ COMPACT_AT = float(os.environ.get("NANO_COMPACT_AT", "0.75"))
 MAX_STEPS = int(os.environ.get("NANO_MAX_STEPS", "25"))   # tool rounds per user turn
 SUBAGENT_MAX_STEPS = int(os.environ.get("NANO_SUBAGENT_MAX_STEPS", "15"))
 BASH_TIMEOUT = int(os.environ.get("NANO_BASH_TIMEOUT", "60"))
+
+# bash sandbox (see sandbox.py). auto: use bwrap if it works, warn if not. on: refuse to
+# run bash without it. off: full user privileges, as before.
+SANDBOX = os.environ.get("NANO_SANDBOX", "auto").lower()
+if SANDBOX not in ("auto", "on", "off"):
+    raise SystemExit(f"NANO_SANDBOX must be auto, on or off, not {SANDBOX!r}")
+SANDBOX_NET = os.environ.get("NANO_SANDBOX_NET", "1") == "1"
+# Extra read-only paths inside the sandbox, ':'-separated, e.g. ~/.nvm:~/.pyenv for tools
+# that live in your home directory (which is otherwise hidden).
+SANDBOX_RO_PATHS = [str(Path(p).expanduser().resolve())
+                    for p in os.environ.get("NANO_SANDBOX_RO_PATHS", "").split(":") if p]
 MAX_TOOL_OUTPUT = int(os.environ.get("NANO_MAX_TOOL_OUTPUT", "8000"))  # chars
 HTTP_TIMEOUT = int(os.environ.get("NANO_HTTP_TIMEOUT", "300"))
 
