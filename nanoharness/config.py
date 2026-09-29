@@ -18,7 +18,10 @@ HTTP_TIMEOUT = int(os.environ.get("NANO_HTTP_TIMEOUT", "300"))
 # The sandbox root. Every path a tool touches must resolve inside this.
 WORKDIR = Path(os.environ.get("NANO_WORKDIR", os.getcwd())).resolve()
 
-SYSTEM_PROMPT = f"""You are a coding agent working in the directory {WORKDIR}.
+
+def system_prompt() -> str:
+    """Built on demand so it always names the current WORKDIR."""
+    return f"""You are a coding agent working in the directory {WORKDIR}.
 
 You have tools to read, write and edit files, and to run shell commands.
 Use them instead of guessing: read a file before you edit it.

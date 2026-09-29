@@ -97,3 +97,8 @@ def test_next_turn_after_interrupt_is_well_formed(agent, monkeypatch):
         agent.turn("write it")
     assert agent.turn("never mind") == "ok, stopping"
     assert_every_call_answered(agent.messages)
+
+
+def test_system_prompt_names_the_current_workdir(agent, tmp_path):
+    """Regression: the prompt was frozen at import, so it named the wrong directory."""
+    assert str(tmp_path) in agent.messages[0]["content"]

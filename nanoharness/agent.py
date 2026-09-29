@@ -8,7 +8,7 @@ from .tools import REGISTRY, ToolError, schemas
 
 class Agent:
     def __init__(self, permissions: Permissions = None):
-        self.messages = [{"role": "system", "content": config.SYSTEM_PROMPT}]
+        self.messages = [{"role": "system", "content": config.system_prompt()}]
         self.permissions = permissions or Permissions()
 
     def run_tool(self, call) -> str:
