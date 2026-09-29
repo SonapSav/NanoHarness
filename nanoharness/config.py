@@ -8,7 +8,9 @@ MODEL = os.environ.get("NANO_MODEL", "aeroadvisor-agent:latest")
 # Ollama silently truncates history past num_ctx, so always set it explicitly.
 NUM_CTX = int(os.environ.get("NANO_NUM_CTX", "49152"))  # matches the Modelfile; do not send less
 TEMPERATURE = float(os.environ.get("NANO_TEMPERATURE", "0.6"))
-THINK = os.environ.get("NANO_THINK", "0") == "1"   # Qwen3 reasoning mode
+# Qwen3 reasoning mode. On by default: in evals it took FizzBuzz from 9/20 to 20/20 (the
+# model stopped shipping swapped Fizz/Buzz as "success") for ~1.7x the time per task.
+THINK = os.environ.get("NANO_THINK", "1") == "1"
 STREAM = os.environ.get("NANO_STREAM", "1") == "1"  # print the reply as it is generated
 # Shrink the history once it is estimated past this fraction of NUM_CTX; the rest is room
 # for the reply. See context.py.
