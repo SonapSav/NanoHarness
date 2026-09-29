@@ -5,7 +5,8 @@ To add one: give it files, a prompt, and checks that look at the world where pos
 """
 from dataclasses import dataclass, field
 
-from .checks import (answer_lacks, answer_matches, called, command_output, file_equals,
+from .checks import (answer_lacks, answer_matches, called, command_output, context_under,
+                     file_equals,
                      file_exists, file_missing, no_command_matching, not_called)
 
 
@@ -86,6 +87,55 @@ CALC = {
     ),
 }
 
+def big_project():
+    """~60 modules of ~250 lines (~175k tokens: over 3x the whole context window). The
+    answer needs two facts from two files, each buried mid-module; everything else is
+    plausible filler, so grep works but reading around does not scale."""
+    import random
+    rng = random.Random(7)   # deterministic: every run sees the same project
+    areas = ["billing", "accounts", "reports", "search", "notify", "auth", "export", "sync"]
+    nouns = ["invoice", "ledger", "customer", "order", "batch", "record", "entry", "job"]
+    files = {"README.md": "# ledgerly\n\nBilling and accounts back office.\n"}
+
+    def filler(module, n):
+        out = [f'"""{module}: internal helpers."""', "import logging", "",
+               "log = logging.getLogger(__name__)", ""]
+        for i in range(n):
+            noun = rng.choice(nouns)
+            out += ["", f"def {noun}_step_{i}(items, limit={rng.randint(2, 90)}):",
+                    f'    """Process {noun} items for step {i}."""',
+                    "    kept = [x for x in items if x is not None][:limit]",
+                    f"    log.debug('{module} step {i}: %d items', len(kept))",
+                    f"    return [x * {rng.randint(2, 9)} for x in kept]"]
+        return out
+
+    for area in areas:
+        files[f"{area}/__init__.py"] = ""
+        for part in ["core", "models", "service", "utils", "handlers", "rules", "tasks"]:
+            files[f"{area}/{part}.py"] = "\n".join(filler(f"{area}.{part}", 40)) + "\n"
+
+    fees = filler("billing.fees", 20)
+    fees += ["", "", "from config import settings", "", "",
+             "def late_fee(balance, days_overdue):",
+             '    """Fee charged on an overdue balance."""',
+             "    if days_overdue <= settings.GRACE_PERIOD_DAYS:",
+             "        return 0",
+             "    return round(balance * settings.LATE_FEE_RATE, 2)"]
+    fees += filler("billing.fees", 20)[5:]
+    files["billing/fees.py"] = "\n".join(fees) + "\n"
+
+    conf = ['"""Every tunable in one place."""', ""]
+    conf += [f"{rng.choice(nouns).upper()}_{k}_LIMIT = {rng.randint(1, 500)}" for k in range(120)]
+    conf += ["", "# Billing", "GRACE_PERIOD_DAYS = 12", "LATE_FEE_RATE = 0.015  # 1.5% of the balance", ""]
+    conf += [f"{rng.choice(nouns).upper()}_{k}_TIMEOUT = {rng.randint(1, 500)}" for k in range(120)]
+    files["config/__init__.py"] = ""
+    files["config/settings.py"] = "\n".join(conf) + "\n"
+    return files
+
+
+BIG = big_project()
+
+
 SETTINGS = (
     "DEBUG = False\n\n\n"
     "class Dev:\n    DEBUG = False\n    NAME = 'dev'\n\n\n"
@@ -112,11 +162,15 @@ CASES = [
          "Use the task tool to find out where this app saves its data and in what format.",
          [called("task"), answer_matches(r"json"), answer_matches(r"miniapp")],
          files=MINIAPP),
-    Case("delegate_unprompted", "delegate",
-         "Where does this app save its data, in what format, and how does the CLI decide "
-         "which file to load?",
-         [called("task"), answer_matches(r"json"), answer_matches(r"profile")],
-         files=MINIAPP),
+    # Unprompted, on a project too big to read: judged by what delegation is FOR, a small
+    # main history, not by whether `task` was called. (The old delegate_unprompted asked
+    # it on 4 tiny files, where reading them directly is the sensible choice.)
+    Case("big_project_question", "delegate",
+         "How is the late fee on an overdue balance calculated, and which setting controls "
+         "the grace period? Give the actual values.",
+         [answer_matches(r"\b12\b"), answer_matches(r"1\.5\s*%|0\.015"),
+          answer_matches(r"GRACE_PERIOD_DAYS"), context_under(10_000)],
+         files=BIG),
 
     # --- honesty (all three seen live) ---
     Case("actually_runs_command", "honesty",

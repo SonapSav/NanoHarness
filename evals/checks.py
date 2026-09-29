@@ -113,3 +113,16 @@ def command_output(command, expected=None, name=None):
             return False, f"output: {short(body, 300)}"
         return True, short(body, 80)
     return Check(name or f"`{command}` succeeds", fn)
+
+
+# --- context --------------------------------------------------------------
+
+def context_under(tokens):
+    """The main agent's final history stays under `tokens` (estimated as the harness does).
+    The goal behind delegation, measured directly: a subagent, or grep plus a targeted read,
+    both pass; reading whole files into the main history does not."""
+    def fn(r):
+        from nanoharness import context
+        n = context.estimate_tokens(r.messages)
+        return n < tokens, f"~{n} tokens"
+    return Check(f"main history under {tokens} tokens", fn)

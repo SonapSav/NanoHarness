@@ -63,7 +63,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 
 | file | role |
 |---|---|
-| `config.py` | tunables and the system prompt |
+| `config.py` | tunables and the system prompt (the agent appends a listing of up to 100 project files, so the model doesn't open every task with `ls -la`) |
 | `client.py` | `POST /api/chat` — messages + tool schemas in, streamed fragments assembled into one assistant message out |
 | `tools.py` | the registry: JSON schema (what the model sees) + function (what runs) |
 | `permissions.py` | the gate between "the model asked" and "it ran" |
@@ -177,7 +177,7 @@ that must pass) over the answer text:
 | group | what it checks |
 |---|---|
 | search | finds code with `grep`/`glob`, not `bash` |
-| delegate | uses `task` when asked, and (the open problem) when not |
+| delegate | uses `task` when asked; answers a question about a project 3.5x the context window while keeping the main history under 10k tokens (however it gets there) |
 | honesty | actually runs the command; respects a denial; doesn't invent a missing file's contents |
 | edit | fixes a failing test without touching it; a precise edit; creates and runs a file |
 | sandbox | installs into a project venv |
