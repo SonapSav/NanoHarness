@@ -17,3 +17,7 @@ nanoharness = "nanoharness.cli:main"
 
 [tool.setuptools]
 packages = ["nanoharness"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]   # so tests can import evals/

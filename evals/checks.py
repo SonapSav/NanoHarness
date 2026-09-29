@@ -1,0 +1,115 @@
+"""Checks: small named predicates over one finished run.
+
+Prefer checks on the world (files, a command that must pass) over checks on the answer
+text: the model's account of what it did is exactly what we cannot take on trust.
+"""
+import re
+from collections import Counter
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable
+
+
+@dataclass
+class Run:
+    """What a check gets to look at."""
+    workdir: Path
+    messages: list
+    answer: str
+    tools: Counter = field(default_factory=Counter)   # main-agent tool calls by name
+    prompts: list = field(default_factory=list)       # permission prompts shown
+
+    def commands(self):
+        """Every bash command the main agent ran."""
+        return [c["function"].get("arguments", {}).get("command", "")
+                for m in self.messages for c in m.get("tool_calls") or []
+                if c.get("function", {}).get("name") == "bash"
+                and isinstance(c["function"].get("arguments"), dict)]
+
+
+@dataclass
+class Check:
+    name: str
+    fn: Callable[[Run], tuple]   # -> (ok: bool, detail: str)
+
+    def __call__(self, run: Run):
+        try:
+            ok, detail = self.fn(run)
+        except Exception as e:     # a broken check is a failed check, not a crashed eval
+            ok, detail = False, f"check raised {type(e).__name__}: {e}"
+        return {"check": self.name, "ok": bool(ok), "detail": detail}
+
+
+def short(text, n=160):
+    return " ".join(str(text).split())[:n]
+
+
+# --- tools ----------------------------------------------------------------
+
+def called(tool):
+    return Check(f"called {tool}", lambda r: (r.tools[tool] > 0, f"tools: {dict(r.tools)}"))
+
+
+def not_called(tool):
+    return Check(f"did not call {tool}", lambda r: (r.tools[tool] == 0, f"tools: {dict(r.tools)}"))
+
+
+def no_command_matching(pattern):
+    rx = re.compile(pattern)
+
+    def fn(r):
+        bad = [c for c in r.commands() if rx.search(c)]
+        return not bad, f"offending: {bad}" if bad else "none"
+    return Check(f"no bash command matching /{pattern}/", fn)
+
+
+# --- answer text ----------------------------------------------------------
+
+def answer_matches(pattern, flags=re.IGNORECASE):
+    rx = re.compile(pattern, flags)
+    return Check(f"answer matches /{pattern}/",
+                 lambda r: (rx.search(r.answer) is not None, short(r.answer)))
+
+
+def answer_lacks(pattern, flags=re.IGNORECASE):
+    rx = re.compile(pattern, flags)
+
+    def fn(r):
+        m = rx.search(r.answer)
+        return m is None, f"found {m.group(0)!r} in: {short(r.answer)}" if m else "absent"
+    return Check(f"answer lacks /{pattern}/", fn)
+
+
+# --- files ----------------------------------------------------------------
+
+def file_equals(path, expected):
+    def fn(r):
+        p = r.workdir / path
+        if not p.exists():
+            return False, f"{path} missing"
+        actual = p.read_text()
+        return actual == expected, "exact" if actual == expected else f"got: {actual!r}"[:300]
+    return Check(f"{path} has the expected content", fn)
+
+
+def file_exists(path):
+    return Check(f"{path} exists", lambda r: ((r.workdir / path).exists(), ""))
+
+
+def file_missing(path):
+    return Check(f"{path} does not exist", lambda r: (not (r.workdir / path).exists(), ""))
+
+
+def command_output(command, expected=None, name=None):
+    """Run `command` in the workdir (sandboxed, like the agent's own bash) and require
+    exit 0 and, if given, exactly `expected` on stdout+stderr."""
+    def fn(r):
+        from nanoharness import tools    # config.WORKDIR is still this run's workdir
+        out = tools.bash(command)
+        head, _, body = out.partition("\n\n")
+        if head != "exit code: 0":
+            return False, short(out, 300)
+        if expected is not None and body.strip() != expected.strip():
+            return False, f"output: {short(body, 300)}"
+        return True, short(body, 80)
+    return Check(name or f"`{command}` succeeds", fn)

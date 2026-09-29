@@ -161,7 +161,29 @@ Anything installed during a command is gone by the next one (`$HOME` is wiped, `
 read-only). Keep a project's dev tools in a venv inside it (`python3 -m venv .venv`), where
 the sandbox can see and keep them.
 
-## Not yet
+## Evals
 
-An eval set: prompt changes (e.g. getting the model to delegate unprompted) are currently
-judged by eye on a handful of live runs.
+`tests/` is offline and proves the harness does what it says. `evals/` asks a different
+question: how well does *this model* behave in it? Each case is a fresh temp workdir, one
+prompt to the live model, and checks on the outcome, preferring the world (files, a command
+that must pass) over the answer text:
+
+```bash
+.venv/bin/python -m evals                          # all cases, 3 runs each (~10-20 min)
+.venv/bin/python -m evals -k honesty -n 5          # by name or group
+.venv/bin/python -m evals --baseline evals/results/<earlier>.json
+```
+
+| group | what it checks |
+|---|---|
+| search | finds code with `grep`/`glob`, not `bash` |
+| delegate | uses `task` when asked, and (the open problem) when not |
+| honesty | actually runs the command; respects a denial; doesn't invent a missing file's contents |
+| edit | fixes a failing test without touching it; a precise edit; creates and runs a file |
+| sandbox | installs into a project venv |
+
+Results (every check, answer and full transcript) go to `evals/results/` (gitignored). With
+temperature 0.6 one run proves little: judge a prompt change by pass rates over several
+runs, against a baseline taken just before it. Add a case whenever the model does something
+worth never seeing again (`evals/cases.py`).
+
