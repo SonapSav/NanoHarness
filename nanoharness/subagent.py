@@ -28,7 +28,10 @@ WRITE_TOOLS = RESEARCH_TOOLS + ["write_file", "edit_file", "bash"]
 def system_prompt(write: bool) -> str:
     if write:
         can = ("Complete it using read_file, glob, grep, write_file, edit_file and bash. "
-               "Change only what the task asks for. Read a file before you edit it.")
+               "Change only what the task asks for. Read a file before you edit it. "
+               "bash is sandboxed: installs outside the working directory vanish after each "
+               "command, so for Python packages create a venv first (python3 -m venv .venv) "
+               "and use .venv/bin/pip and .venv/bin/python.")
     else:
         can = ("Complete it using read_file, glob and grep. You cannot change files or "
                "run commands.")
