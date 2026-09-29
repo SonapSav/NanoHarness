@@ -3,6 +3,11 @@
 A coding agent harness built from scratch. No SDKs, no dependencies — stdlib only,
 so the wire format between you and the model stays visible.
 
+Streaming, context compaction, `grep`/`glob`, saved sessions, subagents (read-only or
+write-capable) and a bubblewrap sandbox for `bash`. 101 offline tests; eval baseline 60/60
+against the live model. What was planned, what's done and what's pending:
+[`docs/project.md`](docs/project.md).
+
 ## Run
 
 One-time install:
@@ -63,15 +68,18 @@ Config is all environment variables (see `nanoharness/config.py`):
 
 | file | role |
 |---|---|
-| `config.py` | tunables and the system prompt (the agent appends a listing of up to 100 project files, so the model doesn't open every task with `ls -la`) |
+| `config.py` | tunables and the system prompt (the agent and its subagents append a listing of up to 100 project files, so the model doesn't open every task with `ls -la`) |
 | `client.py` | `POST /api/chat` — messages + tool schemas in, streamed fragments assembled into one assistant message out |
 | `tools.py` | the registry: JSON schema (what the model sees) + function (what runs) |
 | `permissions.py` | the gate between "the model asked" and "it ran" |
 | `context.py` | keeps the history inside `num_ctx` |
 | `session.py` | saves and resumes conversations |
-| `subagent.py` | the `task` tool's fresh, read-only agent |
+| `subagent.py` | the `task` tool's fresh agent: read-only by default, write-capable on request |
+| `sandbox.py` | the bubblewrap command line `bash` runs in |
 | `agent.py` | the loop |
 | `cli.py` | REPL |
+| `evals/` | live-model eval cases and runner (`python -m evals`) |
+| `docs/project.md` | status against the original plan, and what's pending |
 
 The whole idea is `agent.py`:
 
@@ -103,7 +111,8 @@ The system prompt and the current request are never touched. A grey line says wh
 `glob` and `grep` are pure Python (no ripgrep), read-only so they never prompt, skip
 `.git`/`.venv`/`node_modules`/caches and binary files, and ignore symlinks that point outside
 `WORKDIR`. A glob without `/` matches file names at any depth, so `*.py` finds them all. Their
-descriptions (and `bash`'s) steer the model toward them; it still reaches for `find` now and then.
+descriptions (and `bash`'s) steer the model toward them, and with the file listing in the prompt
+it no longer reaches for `ls`/`find` in the evals.
 
 Every tool failure is returned to the model as `Error: ...` text rather than raised.
 Small models usually self-correct when told what went wrong; a crash teaches them nothing.
@@ -124,8 +133,10 @@ for a partial report.
   `[harness: files changed by the subagent: ...]` from the calls that actually succeeded, so
   the main agent doesn't have to take its word. `bash` effects are counted, not tracked.
 
-The model rarely delegates on its own, so ask for it ("use task to find out ...", "use task
-with write=true to ...").
+The model doesn't delegate on its own, so ask for it ("use task to find out ...", "use task
+with write=true to ..."); when asked it does, reliably (15/15 in evals). Unprompted, on a
+project 3.5x the context window, it used `grep` and partial reads and kept the main history
+small, so it hasn't needed to.
 
 ### The `bash` sandbox
 
@@ -169,9 +180,9 @@ prompt to the live model, and checks on the outcome, preferring the world (files
 that must pass) over the answer text:
 
 ```bash
-.venv/bin/python -m evals                          # all cases, 3 runs each (~10-20 min)
+.venv/bin/python -m evals                          # all 12 cases, 3 runs each (~8 min)
 .venv/bin/python -m evals -k honesty -n 5          # by name or group
-.venv/bin/python -m evals --baseline evals/results/<earlier>.json
+.venv/bin/python -m evals --baseline evals/results/baseline-3dbdeef.json
 ```
 
 | group | what it checks |
@@ -186,4 +197,8 @@ Results (every check, answer and full transcript) go to `evals/results/` (gitign
 temperature 0.6 one run proves little: judge a prompt change by pass rates over several
 runs, against a baseline taken just before it. Add a case whenever the model does something
 worth never seeing again (`evals/cases.py`).
+
+**Baseline** at `3dbdeef`, 5 runs per case: **60/60**. At 100% the set catches regressions but
+can't show improvements; it needs harder cases the model sometimes fails. Candidates are listed
+in [`docs/project.md`](docs/project.md#pending).
 
