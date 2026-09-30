@@ -2,6 +2,7 @@
 import json
 import os
 import re
+from collections import Counter
 import signal
 import subprocess
 from contextvars import ContextVar
@@ -452,30 +453,39 @@ def search_history(pattern):
     except re.error as e:
         raise ToolError(f"Invalid regular expression {pattern!r}: {e}.") from None
 
-    hits, more = [], False
-    for i, m in enumerate(archive, start=1):
-        text = searchable(m)
-        label = f"tool result ({m.get('tool_name', '?')})" if m["role"] == "tool" else m["role"]
-        end, shown, extra = 0, 0, 0
-        for match in rx.finditer(text):
-            if shown and match.start() < end:
-                continue              # already inside the previous snippet
-            if shown == MAX_HITS_PER_MESSAGE:
-                extra += 1
+    # Every match first, so each can be ranked by how common its text is across the archive.
+    # Seen live: in `ops|...|load balancer`, "ops" matched every email's From: line and used up
+    # the thread's snippets; the one "load balancer" line never showed. Rarest first fixes that.
+    texts = {i: searchable(m) for i, m in enumerate(archive, start=1)}
+    found = [(i, mt.start(), mt.end(), mt.group(0).lower())
+             for i, text in texts.items() for mt in rx.finditer(text) if mt.end() > mt.start()]
+    freq = Counter(key for *_, key in found)
+
+    picked, extra = [], Counter()    # (rarity, message, start, end); extra = not shown, per message
+    for i in texts:
+        mine = []
+        for _, s, e, key in sorted((x for x in found if x[0] == i), key=lambda x: (freq[x[3]], x[1])):
+            if any(ps - SNIPPET_BEFORE <= s < pe + SNIPPET_AFTER for _, _, ps, pe in mine):
+                continue              # already inside a chosen snippet
+            if len(mine) == MAX_HITS_PER_MESSAGE:
+                extra[i] += 1
                 continue
-            if len(hits) == MAX_HISTORY_HITS:
-                more = True
-                break
-            start = max(0, match.start() - SNIPPET_BEFORE)
-            end = min(len(text), match.end() + SNIPPET_AFTER)
-            snippet = " ".join(text[start:end].split())
-            hits.append(f"[message {i}, {label}] {'...' if start else ''}{snippet}"
-                        f"{'...' if end < len(text) else ''}")
-            shown += 1
-        if extra:
-            hits[-1] += f"\n[+{extra} more matches in message {i}; narrow the pattern to see them]"
-        if more:
-            break
+            mine.append((freq[key], i, s, e))
+        picked += mine
+    more = len(picked) > MAX_HISTORY_HITS
+    if more:
+        picked = sorted(picked)[:MAX_HISTORY_HITS]
+
+    hits = []
+    for _, i, s, e in sorted(picked, key=lambda x: (x[1], x[2])):
+        text, m = texts[i], archive[i - 1]
+        label = f"tool result ({m.get('tool_name', '?')})" if m["role"] == "tool" else m["role"]
+        a, b = max(0, s - SNIPPET_BEFORE), min(len(text), e + SNIPPET_AFTER)
+        hits.append(f"[message {i}, {label}] {'...' if a else ''}{' '.join(text[a:b].split())}"
+                    f"{'...' if b < len(text) else ''}")
+        last_of_message = not any(x[1] == i and x[2] > s for x in picked)
+        if last_of_message and extra[i]:
+            hits[-1] += f"\n[+{extra[i]} more matches in message {i}; narrow the pattern to see them]"
 
     if not hits:
         return (f"No matches for {pattern!r} in the {len(archive)} summarized messages. Try other "

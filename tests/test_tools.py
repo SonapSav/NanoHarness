@@ -253,3 +253,12 @@ def test_search_history_says_what_to_do_when_the_detail_is_not_there():
         assert "don't guess" in out
     assert "search again with other words" in search(archive, "readiness")
     assert "Try other words" in search(archive, "nowhere")
+
+
+def test_rare_matches_are_shown_before_common_ones():
+    # Seen live: "ops" matched every email's From: line and hid the one line that mattered.
+    emails = "\n\n".join(f"From: ops{n}@example.com\n" + "body " * 80 for n in range(10))
+    thread = emails + "\nthe load balancer probes GET /_probe/ready\n" + emails
+    out = search([{"role": "user", "content": thread}], "ops|load balancer")
+    assert "/_probe/ready" in out
+    assert out.count("[message 1,") == 3 and "more matches in message 1" in out
