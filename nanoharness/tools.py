@@ -419,6 +419,9 @@ MAX_HISTORY_HITS = 20
 # Per message, so one big noisy message (a pasted log) cannot crowd out the rest: seen live,
 # 20 hits on filler in one file read hid the one line that mattered in a later message.
 MAX_HITS_PER_MESSAGE = 3
+# Seen live: a search that matched only "noted the readiness probe requirement" (no path), and
+# the model guessed a path. So every result says what to do when the detail isn't in it.
+NOT_FOUND_ADVICE = ("If the detail isn't there, don't guess it: tell the user it's missing and ask.")
 SNIPPET_BEFORE, SNIPPET_AFTER = 150, 250   # a pasted paragraph can be one 3000-char line
 
 
@@ -475,11 +478,13 @@ def search_history(pattern):
             break
 
     if not hits:
-        return f"No matches for {pattern!r} in the {len(archive)} summarized messages."
+        return (f"No matches for {pattern!r} in the {len(archive)} summarized messages. Try other "
+                f"words (single keywords work best). {NOT_FOUND_ADVICE}")
     out = "\n\n".join(hits)
     if more:
         out += f"\n\n[stopped at {MAX_HISTORY_HITS} matches; narrow the pattern]"
-    return truncate(out)
+    return truncate(out) + ("\n\n[If none of this states the exact detail you need, search again "
+                            f"with other words. {NOT_FOUND_ADVICE}]")
 
 
 def searchable(m) -> str:

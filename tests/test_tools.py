@@ -245,3 +245,11 @@ def test_one_noisy_message_cannot_crowd_out_the_rest():
     out = search([noisy, real], "probe")
     assert "/_probe/ready" in out
     assert out.count("[message 1,") == 3 and "more matches in message 1" in out
+
+
+def test_search_history_says_what_to_do_when_the_detail_is_not_there():
+    archive = [{"role": "assistant", "content": "I've noted the readiness probe requirement."}]
+    for out in (search(archive, "readiness"), search(archive, "nowhere")):
+        assert "don't guess" in out
+    assert "search again with other words" in search(archive, "readiness")
+    assert "Try other words" in search(archive, "nowhere")
