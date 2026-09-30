@@ -30,6 +30,7 @@ def chat(messages, tools=None, on_token=None):
         "options": {
             "num_ctx": config.NUM_CTX,
             "temperature": config.TEMPERATURE,
+            "num_predict": config.NUM_PREDICT,
         },
     }
     if tools:
@@ -86,6 +87,12 @@ def read_stream(lines, on_token=None):
         tool_calls.extend(message.get("tool_calls") or [])
 
         if chunk.get("done"):
+            if chunk.get("done_reason") == "length":
+                where = "while still reasoning" if not content and not tool_calls else "mid-reply"
+                raise ModelError(
+                    f"The model was cut off {where}: it hit the cap of {config.NUM_PREDICT} tokens "
+                    "per reply (NANO_NUM_PREDICT). Nothing it said in that reply was kept."
+                )
             break
     else:
         raise ModelError("Ollama's reply ended before it was done.")

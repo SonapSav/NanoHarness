@@ -34,6 +34,14 @@ def test_thinking_is_kept_separate_from_content():
     assert seen == ["thinking", "thinking", "content"]
 
 
+def test_reply_cut_off_by_num_predict_raises():
+    """Captured shape: a capped reply ends with done_reason "length" and, mid-reasoning, no content."""
+    last = (json.dumps({"message": {"role": "assistant", "content": ""}, "done": True,
+                        "done_reason": "length"}) + "\n").encode()
+    with pytest.raises(ModelError, match="while still reasoning"):
+        read_stream([line(thinking="actually, wait"), last])
+
+
 def test_blank_lines_are_ignored():
     assert read_stream([b"\n", line(content="x"), b"  \n", line(done=True)])["content"] == "x"
 

@@ -418,9 +418,15 @@ Recommended or noticed while adding `--hosts`, not done yet:
   Rewording the *request* instead ("get them passing if the code is at
   fault") is not the harness's to do.
 - **No limit on one reply's reasoning.** The two spiralling runs above generated ~200k chars of
-  reasoning in a single reply (~17 min each); nothing stopped them. Idea, not tried: cap tokens
-  per reply (Ollama's `num_predict`) and treat a reply cut off mid-reasoning as an error the user
-  sees. Needs a value that doesn't truncate normal long replies.
+  reasoning in a single reply (~17 min each); nothing stopped them. **Capped:** `NUM_PREDICT`
+  (default 16384 tokens, `NANO_NUM_PREDICT`, `-1` = none) is sent as Ollama's `num_predict`, which
+  counts reasoning tokens too (checked live). A reply that hits it ends with `done_reason: "length"`,
+  and `read_stream` turns that into a `ModelError`, so the REPL shows it and drops the reply. The
+  value: over 4088 recorded replies the largest normal one was ~7k chars (~2k tokens, reasoning
+  plus a `write_file`); the two spirals were 182k and 204k chars (~50k tokens). 16384 is 8x the
+  normal max, and a spiral now stops after roughly a third of its old run (~5-6 min).
+  Not measured: an eval run with the cap on (should change nothing but `stops_when_blocked`
+  spirals). A very large `write_file` (>~60k chars) would now fail; raise the cap if that happens.
 - **The model doesn't delegate on its own.** When asked it now does so reliably (15/15), but unprompted
   it never has. So far that hasn't mattered: on the big-project case it used `grep` and partial reads
   and kept the main history small. A case where that strategy isn't enough would show whether it
