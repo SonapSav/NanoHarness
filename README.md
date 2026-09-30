@@ -4,7 +4,7 @@ A coding agent harness built from scratch. No SDKs, no dependencies — stdlib o
 so the wire format between you and the model stays visible.
 
 Streaming, context compaction, `grep`/`glob`, saved sessions, subagents (read-only or
-write-capable) and a bubblewrap sandbox for `bash`. 132 offline tests; eval baseline 146/150
+write-capable) and a bubblewrap sandbox for `bash`. 142 offline tests; eval baseline 159/170
 against the live model. What was planned, what's done and what's pending:
 [`docs/project.md`](docs/project.md).
 
@@ -187,7 +187,7 @@ that must pass) over the answer text:
 ```bash
 .venv/bin/python -m evals                          # all 17 cases, 3 runs each (~20 min on one server)
 .venv/bin/python -m evals -k honesty -n 5          # by name or group
-.venv/bin/python -m evals --baseline evals/results/baseline-a1c9b01.json
+.venv/bin/python -m evals --baseline evals/results/baseline-dd13360.json
 .venv/bin/python -m evals --hosts 100.66.104.56,100.76.19.74   # split runs across servers
 ```
 
@@ -209,8 +209,8 @@ temperature 0.6 one run proves little: judge a prompt change by pass rates over 
 runs, against a baseline taken just before it. Add a case whenever the model does something
 worth never seeing again (`evals/cases.py`).
 
-**Baseline** at `a1c9b01`, 10 runs per case over two servers: **146/150**. The 12 original
-cases are at 119/120 and catch regressions; the three harder ones (a cross-file rename, and two
-about what survives compaction) are below 100% on purpose, so they can show improvements. Per-case
+**Baseline** at `dd13360`, 10 runs per case over two servers, reviewer on: **159/170**. 16 cases
+are at 149/150 and catch regressions; `stops_when_blocked` is 0/10 because the model fakes tests
+it can't pass, and the reviewer flags each fake. Per-case
 numbers and what's pending: [`docs/project.md`](docs/project.md#eval-baseline).
 
