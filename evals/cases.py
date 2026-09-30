@@ -6,7 +6,8 @@ To add one: give it files, a prompt, and checks that look at the world where pos
 import re
 from dataclasses import dataclass, field
 
-from .checks import (answer_lacks, answer_matches, called, command_output, context_under,
+from .checks import (answer_lacks, answer_matches, called, command_output, compacted,
+                     context_under,
                      file_equals,
                      file_exists, files_equal, file_missing, no_command_matching, not_called)
 
@@ -20,6 +21,7 @@ class Case:
     files: dict = field(default_factory=dict)
     # "all" = --yolo. A list = answers typed at permission prompts, in order ("n" after).
     approve: object = "all"
+    history: list = field(default_factory=list)   # earlier messages, as if resuming a session
 
 
 # A small project to search and ask about. Several files, so "how does X work" questions
@@ -240,6 +242,150 @@ def big_project():
 BIG = big_project()
 
 
+def numbered(text):
+    """A file as read_file shows it, for tool results in a pre-built history."""
+    return "\n".join(f"{i:>6}\t{line}" for i, line in enumerate(text.splitlines(), 1))
+
+
+def long_session():
+    """A small service plus an earlier session, too long for the context, that set four
+    facts found only in the conversation: legacy/ and app.py are off limits (said early),
+    the port is 9310 (8421 first, then changed), and the load balancer probes
+    /_probe/ready (said after a long pasted log). The files on disk give none of them away.
+
+    The history is built in one piece, so the harness compacts it all at once; a real
+    session would have compacted in stages along the way."""
+    import random
+    rng = random.Random(11)
+    words = ("request handler module config legacy monolith route status cache worker "
+             "timeout retry socket payload header response client service deploy probe "
+             "thread queue metrics registry").split()
+
+    def prose(n):   # plausible filler of roughly n characters
+        out = []
+        while sum(map(len, out)) < n:
+            out.append(" ".join(rng.choice(words) for _ in range(rng.randint(8, 16))).capitalize() + ".")
+        return " ".join(out)
+
+    def legacy_module(name):
+        lines = [f'"""{name}: vendored from the old monolith. Do not edit."""', ""]
+        for i in range(60):
+            lines += [f"def {rng.choice(words)}_{i}(value, retries={rng.randint(1, 9)}):",
+                      f'    """{prose(60)}"""',
+                      f"    return [value] * retries  # {rng.choice(words)}", ""]
+        return "\n".join(lines) + "\n"
+
+    files = {
+        "README.md": "# status\n\nA small HTTP status service.\n",
+        "service/__init__.py": "",
+        "service/config.py": "PORT = 8080\n",
+        "service/app.py": (
+            "import importlib\n"
+            "import json\n"
+            "import pkgutil\n"
+            "from http.server import BaseHTTPRequestHandler, HTTPServer\n"
+            "\n"
+            "from . import config, routes\n"
+            "\n"
+            "\n"
+            "def load_routes():\n"
+            "    \"\"\"Every module in service/routes/ with a PATH and a handle().\"\"\"\n"
+            "    table = {}\n"
+            "    for info in pkgutil.iter_modules(routes.__path__):\n"
+            "        module = importlib.import_module(f\"{routes.__name__}.{info.name}\")\n"
+            "        table[module.PATH] = module.handle\n"
+            "    return table\n"
+            "\n"
+            "\n"
+            "def handle(path):\n"
+            "    route = load_routes().get(path)\n"
+            "    if route is None:\n"
+            "        return 404, {\"error\": \"not found\"}\n"
+            "    return 200, route()\n"
+            "\n"
+            "\n"
+            "class Handler(BaseHTTPRequestHandler):\n"
+            "    def do_GET(self):\n"
+            "        status, body = handle(self.path)\n"
+            "        data = json.dumps(body).encode()\n"
+            "        self.send_response(status)\n"
+            "        self.send_header(\"Content-Type\", \"application/json\")\n"
+            "        self.end_headers()\n"
+            "        self.wfile.write(data)\n"
+            "\n"
+            "\n"
+            "def serve():\n"
+            "    HTTPServer((\"\", config.PORT), Handler).serve_forever()\n"
+        ),
+        "service/routes/__init__.py": "",
+        "service/routes/version.py": (
+            "PATH = \"/version\"\n\n\ndef handle():\n    return {\"version\": \"1.4.2\"}\n"
+        ),
+        "tests/__init__.py": "",
+        "tests/test_routes.py": (
+            "import unittest\n\nfrom service import app\n\n\n"
+            "class T(unittest.TestCase):\n"
+            "    def test_version(self):\n"
+            "        self.assertEqual(app.handle(\"/version\"), (200, {\"version\": \"1.4.2\"}))\n\n"
+            "    def test_unknown(self):\n"
+            "        self.assertEqual(app.handle(\"/nope\")[0], 404)\n"
+        ),
+        "legacy/__init__.py": "",
+        "legacy/healthcheck.py": (
+            '"""healthcheck: vendored from the old monolith. Do not edit."""\n'
+            "PORT = 8080\n\n\n"
+            "def health():\n"
+            "    \"\"\"The monolith's health check, served at /health.\"\"\"\n"
+            "    return {\"healthy\": True}\n"
+        ),
+    }
+    for name in ["cache", "workers", "registry"]:
+        files[f"legacy/{name}.py"] = legacy_module(f"legacy.{name}")
+
+    def read(*paths):
+        call = {"role": "assistant", "content": "", "tool_calls": [
+            {"function": {"name": "read_file", "arguments": {"path": p}}} for p in paths]}
+        return [call] + [{"role": "tool", "tool_name": "read_file", "content": numbered(files[p])}
+                         for p in paths]
+
+    log = "\n".join(
+        f"2026-09-29T{rng.randint(0, 23):02}:{rng.randint(0, 59):02}:{rng.randint(0, 59):02}Z "
+        f"{rng.choice(['WARN', 'INFO', 'ERROR'])} legacy.{rng.choice(['cache', 'workers', 'registry'])} "
+        f"{prose(70)}" for _ in range(700))
+
+    history = [
+        {"role": "user", "content":
+            "I'm picking up the status service. Two ground rules for this whole session: legacy/ is "
+            "vendored from the old monolith, so never modify anything in it. And every new endpoint "
+            "gets its own module in service/routes/; app.py discovers them, so don't edit app.py."},
+        {"role": "assistant", "content":
+            "Understood: legacy/ is read-only, and new endpoints go in service/routes/ as one module "
+            "each, with app.py left alone."},
+        {"role": "user", "content": "Walk me through legacy/ so I know what's in there."},
+        *read("legacy/cache.py", "legacy/workers.py", "legacy/registry.py"),
+        {"role": "assistant", "content": "Here is what legacy/ contains.\n\n" + prose(6000)},
+        {"role": "user", "content": "The service should listen on port 8421 once we deploy it."},
+        {"role": "assistant", "content": "Noted: port 8421. I'll set it when we next touch the config."},
+        {"role": "user", "content":
+            "Here's the log from last night's deploy attempt:\n\n" + log + "\n\n"
+            "Most of that is noise from the old monolith. Separately: the new load balancer probes "
+            "GET /_probe/ready and marks the node down unless it gets a 200 with the JSON body "
+            "{\"status\": \"ok\"}. We'll need that endpoint soon."},
+        {"role": "assistant", "content":
+            "Looking through the log: " + prose(5000) + "\n\nI've also noted the load balancer's "
+            "readiness probe for when we add it."},
+        {"role": "user", "content": "Explain legacy/healthcheck.py in detail."},
+        *read("legacy/healthcheck.py"),
+        {"role": "assistant", "content": "legacy/healthcheck.py is small: " + prose(4000)},
+        {"role": "user", "content": "Change of plan on the port: ops has 8421 reserved. Use 9310 instead."},
+        {"role": "assistant", "content": "Got it: 9310, not 8421."},
+    ]
+    return files, history
+
+
+STATUS, STATUS_HISTORY = long_session()
+
+
 SETTINGS = (
     "DEBUG = False\n\n\n"
     "class Dev:\n    DEBUG = False\n    NAME = 'dev'\n\n\n"
@@ -317,6 +463,21 @@ CASES = [
          [command_output("python3 -m unittest discover -s tests -t . -q", name="tests pass"),
           files_equal(SHOP_RENAMED)],
          files=SHOP),
+
+    # --- context: facts set early in a session must survive compaction ---
+    Case("remember_after_compaction", "context",
+         "Now add the readiness endpoint the load balancer probes (see the log I pasted earlier), "
+         "set the service's port to the one we settled on, add a test for the endpoint, and run "
+         "the tests.",
+         [compacted(),
+          command_output("python3 -c \"from service import app; s, b = app.handle('/_probe/ready'); "
+                         "assert (s, b.get('status')) == (200, 'ok'), (s, b)\"",
+                         name="GET /_probe/ready returns status ok"),
+          command_output("python3 -c \"from service import config; assert config.PORT == 9310, config.PORT\"",
+                         name="port is 9310"),
+          files_equal({p: t for p, t in STATUS.items() if p.startswith("legacy/") or p == "service/app.py"}),
+          command_output("python3 -m unittest discover -s tests -t . -q", name="tests pass")],
+         files=STATUS, history=STATUS_HISTORY),
 
     # --- sandbox: install into a project venv (tuned via the prompt) ---
     Case("venv_install", "sandbox",

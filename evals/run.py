@@ -55,7 +55,9 @@ def run_case(case, keep=False):
         return next(answers, "n")
 
     builtins.input = scripted_input
-    agent = Agent(Permissions(yolo=case.approve == "all"))
+    # Agent swaps in today's system prompt for the first message, so a placeholder will do.
+    history = [{"role": "system", "content": ""}] + case.history if case.history else None
+    agent = Agent(Permissions(yolo=case.approve == "all"), messages=history)
     out, error, answer = io.StringIO(), None, ""
     start = time.monotonic()
     try:

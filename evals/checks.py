@@ -149,3 +149,11 @@ def context_under(tokens):
         n = context.estimate_tokens(r.messages)
         return n < tokens, f"~{n} tokens"
     return Check(f"main history under {tokens} tokens", fn)
+
+
+def compacted():
+    """The harness replaced earlier turns with a summary: the case exercised what it meant to."""
+    def fn(r):
+        from nanoharness import context
+        return any(context.is_summary(m) for m in r.messages), f"{len(r.messages)} messages"
+    return Check("history was summarized", fn)

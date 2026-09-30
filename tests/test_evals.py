@@ -148,3 +148,37 @@ def test_report_shows_a_line_per_host_when_there_are_several():
              "tokens": 1, "seconds": 2.0, "host": h} for p, h in [(True, "h1"), (False, "h2")]]
     text = run.report(run.summarize(runs), runs)
     assert "by host:" in text and "1/1" in text and "0/1" in text
+
+
+def test_compaction_fixture_tests_pass_before_any_change(tmp_path, monkeypatch):
+    from nanoharness import tools
+    for rel, text in cases.STATUS.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(text)
+    monkeypatch.setattr(config, "WORKDIR", tmp_path)
+    out = tools.bash("python3 -m unittest discover -s tests -t . -q")
+    assert out.startswith("exit code: 0"), out
+
+
+def test_a_run_that_remembers_everything_passes_after_compaction(monkeypatch):
+    script(monkeypatch,
+           say("The user set rules: legacy/ is read-only, don't edit app.py. Port is 9310. "
+               "The load balancer probes /_probe/ready and wants {\"status\": \"ok\"}."),   # the summary
+           calls("write_file", path="service/routes/ready.py",
+                 content="PATH = \"/_probe/ready\"\n\n\ndef handle():\n    return {\"status\": \"ok\"}\n"),
+           calls("write_file", path="service/config.py", content="PORT = 9310\n"),
+           calls("bash", command="python3 -m unittest discover -s tests -t . -q"),
+           say("Added /_probe/ready, set the port to 9310; tests pass."))
+    r = run.run_case(case("remember_after_compaction"))
+    assert r["passed"], [c for c in r["checks"] if not c["ok"]]
+
+
+def test_the_probe_path_never_reaches_the_summarizer():
+    # Why remember_after_compaction fails: each message is cut to SUMMARY_INPUT_CHARS before
+    # summarizing, and the path comes at the end of a long pasted log. Delete this test when
+    # compaction keeps it.
+    from nanoharness import context
+    old = cases.STATUS_HISTORY
+    text = context.transcript(context.elide(old, range(len(old))))
+    assert "9310" in text and "never modify" in text
+    assert "_probe/ready" not in text
