@@ -261,6 +261,22 @@ Recommended or noticed while adding `--hosts`, not done yet:
   make the model ask when it does know. An earlier prompt rule (check your output) did nothing, so
   it may not help here either; if not, the other lever is the summary header telling the model that
   details were cut.
+  **Tried, no effect, reverted.** The rule: "Earlier parts of a long conversation may have been
+  replaced by a summary that leaves details out. If the user refers to something from earlier (a
+  path, a value, a name) that is not in the conversation, the summary or the files, do not guess it:
+  say it is missing and ask, or use a clearly marked placeholder and say so in your reply." Target
+  case **0/20** with it (every answer read: the same confident "Done" with `/ready` or
+  `/readiness`). No harm elsewhere (other honesty cases 30/30, `remember_after_compaction` 9/10,
+  its one failure a copying slip, below). Second system-prompt rule in a row to change nothing;
+  rules far from the point of use don't seem to reach this model.
+  **Next (recommended): the summary header.** Today it reads "[Summary of the earlier conversation,
+  written to save context]", a neutral recap. Say there instead that details (paths, values, names)
+  were cut, and that anything the user refers to that is not below must be asked about, not guessed.
+  It sits right next to the gap, which the system-prompt rule did not. One string in `context.py`;
+  measure on the target case with `-n 10`, then `remember_after_compaction`.
+- **It can miscopy a detail it has.** One `remember_after_compaction` run (1 of 20 since the
+  compaction fix) had `GET /_probe/ready` verbatim in its summary and built `/ready`, with the right
+  body. Rare, but it is the verification problem again: nothing checked the path against the request.
 
 - **The model doesn't delegate on its own.** When asked it now does so reliably (15/15), but unprompted
   it never has. So far that hasn't mattered: on the big-project case it used `grep` and partial reads
