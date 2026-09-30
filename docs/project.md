@@ -36,11 +36,11 @@ Beyond the plan: an eval set for the live model (`93a2bfe`), reasoning mode on b
 (`2d5302b`), a project file listing in the main and subagent prompts (`914b5bb`, `4295af3`), and five
 fixes to the stage-1 code found while reading it.
 
-Current state: **116 offline tests pass** (`tests/`, no model or network), and the **eval baseline
+Current state: **126 offline tests pass** (`tests/`, no model or network), and the **eval baseline
 is 60/60** (12 cases × 5 runs against the live model). Two harder cases added since
 are measured separately (see [Harder eval cases](#harder-eval-cases)): `rename_across_files` 18/19,
 `remember_after_compaction` 10/10 (0/10 before a compaction fix it found),
-`admits_what_compaction_lost` 0/10.
+`admits_what_compaction_lost` 8/10 (0/10 before `search_history`).
 
 ## What was built
 
@@ -120,6 +120,16 @@ dropped.
 then kept exploring itself, even when told to use `task`. Listing up to 100 project files in the
 system prompt removed that: `delegate_when_asked` went from 3/5 to 10/10 and `list_test_files` from
 3/5 to 10/10. In subagents, refused `bash` calls dropped from 18 to 1.
+
+**Searchable history after compaction** (`search_history`). When compaction summarizes earlier
+turns, the originals (as they were before that step, so a long paste is whole) go to an archive on
+the agent, saved in the session file (so it survives `--resume`; older files without one still
+load). `search_history(pattern)` is offered only once the archive is non-empty, so a session that
+never compacts sees the same tools as before. It returns a snippet around each match, numbered by
+message (a pasted paragraph can be one 3000-char line), at most 3 per message so one noisy message
+cannot crowd out the rest, and it searches tool-call arguments too. The summary header points to
+it. Built because telling the model not to guess failed three times (0/30); with the tool it
+searched in every run and `admits_what_compaction_lost` went to 8/10.
 
 **Venv rule for the sandbox.** Installs outside `WORKDIR` vanish between commands, and a subagent spent
 11 calls failing to install pytest. The prompts now say to install into a project `.venv`; live runs
@@ -274,9 +284,37 @@ Recommended or noticed while adding `--hosts`, not done yet:
   were cut, and that anything the user refers to that is not below must be asked about, not guessed.
   It sits right next to the gap, which the system-prompt rule did not. One string in `context.py`;
   measure on the target case with `-n 10`, then `remember_after_compaction`.
-- **It can miscopy a detail it has.** One `remember_after_compaction` run (1 of 20 since the
-  compaction fix) had `GET /_probe/ready` verbatim in its summary and built `/ready`, with the right
-  body. Rare, but it is the verification problem again: nothing checked the path against the request.
+  **Tried, no effect.** Header: "... It is incomplete: details such as exact paths, values and names
+  were cut. If the user refers to something from earlier that is not stated below, do not guess it:
+  say it is missing and ask." Target **0/10** (in every summary, every answer read: same "Done"),
+  `remember_after_compaction` 10/10. Three instruction-only attempts, 0/30 between them: in the
+  middle of a task this model fills gaps rather than stopping, whatever it is told.
+  **Done: make the details findable (`search_history`).** See [Beyond the plan](#beyond-the-plan).
+  The case now also passes if the model finds the real path (the endpoint works) as well as if it
+  says the path is missing. Live, 10 runs each over both servers:
+  - first version: **4/10**. The model searched in 10/10 runs, the first thing that changed its
+    behaviour. The 6 failures: results capped at 20, all spent on filler in one earlier file read.
+  - with at most 3 snippets per message, and the fixture fixed (below): **8/10**, every pass by
+    finding `/_probe/ready` through a search. `remember_after_compaction` 9/10 with no search in any
+    run (8.9 tool calls on average, 9.0 before): the tool is ignored when it isn't needed.
+  - the fixture fix: "probe" was one of the random filler words, so it appeared hundreds of times
+    and buried the real line. It is now "buffer"; the rest of the generated text is unchanged, both
+    histories still force a summary. Results for both compaction cases before this change used the
+    old fixture.
+  **Still open:**
+  - One run searched `ops thread|readiness|port 9310`, missed (the line says "load balancer: it
+    probes GET /_probe/ready"), then guessed `/readiness` and said "Done". After an empty search it
+    still invents rather than searching again or saying so. Something to try: the "No matches"
+    result could say so plainly ("nothing found: do not guess, try other words or ask").
+  - One run never searched and guessed straight away.
+  - One run called `list_directory`, a tool that doesn't exist (it got the usual error and carried
+    on). Worth watching for.
+  - The first runs on each server took 140–250 s against ~60 s later, with the same number of
+    rounds. Probably the servers (loading, cache), not the tool, but not checked.
+- **It can miscopy a detail it has.** Two `remember_after_compaction` runs (2 of 30 since the
+  compaction fix) had `GET /_probe/ready` verbatim in their summary and built `/ready` and
+  `/probe/ready`, with the right body. Rare, but it is the verification problem again: nothing
+  checked the path against the request.
 
 - **The model doesn't delegate on its own.** When asked it now does so reliably (15/15), but unprompted
   it never has. So far that hasn't mattered: on the big-project case it used `grep` and partial reads
@@ -288,6 +326,10 @@ Recommended or noticed while adding `--hosts`, not done yet:
 - **Made-up command output is rare but real**: about 1 in 20 runs without reasoning mode.
 
 ### Known limitations
+
+- **The archive keeps what a summary replaced, as it was at that moment.** Old tool outputs shortened
+  in an earlier step (before any summary) are archived shortened; files can be read again, but a
+  command's output cannot. Messages are never dropped from it, so a long session's file grows.
 
 - **The sandbox guards `bash` only.** It doesn't stop `rm -rf .` inside `WORKDIR`; the permission
   prompt is the gate for that. For unattended use, set `NANO_SANDBOX=on` so a broken `bwrap` refuses

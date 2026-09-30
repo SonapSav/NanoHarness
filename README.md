@@ -4,7 +4,7 @@ A coding agent harness built from scratch. No SDKs, no dependencies — stdlib o
 so the wire format between you and the model stays visible.
 
 Streaming, context compaction, `grep`/`glob`, saved sessions, subagents (read-only or
-write-capable) and a bubblewrap sandbox for `bash`. 116 offline tests; eval baseline 60/60
+write-capable) and a bubblewrap sandbox for `bash`. 126 offline tests; eval baseline 60/60
 against the live model. What was planned, what's done and what's pending:
 [`docs/project.md`](docs/project.md).
 
@@ -33,7 +33,9 @@ Every conversation is saved after each message to `~/.local/share/nanoharness/se
 (one `0600` JSON file each; outside the project so the agent's tools can't touch it). A
 session resumes only in the directory it started in, with today's system prompt. `[a]lways`
 approvals are deliberately not saved. `/sessions` lists them, `/reset` starts a new one.
-Nothing cleans old sessions up; delete the files when you like.
+Nothing cleans old sessions up; delete the files when you like. When compaction summarizes
+earlier turns, the originals are kept in the session file too, and the agent gets a
+`search_history` tool to look details up in them.
 
 No activation needed — the entry point's shebang points straight at `.venv/bin/python3`.
 The install is editable, so source edits take effect immediately. The command is
