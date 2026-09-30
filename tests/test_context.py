@@ -149,3 +149,11 @@ def test_a_summary_that_is_not_smaller_is_discarded(monkeypatch):
     msgs = [sys_(), user("q" * 5000), user("current")]
     out, note = context.fit(msgs)
     assert "not smaller" in note and out[1] == msgs[1]
+
+
+def test_the_summarizer_sees_the_start_and_end_of_a_long_message():
+    long = "NOTE-AT-START " + "x" * 5000 + " NOTE-AT-END"
+    text = context.render(user(long))
+    assert "NOTE-AT-START" in text and "NOTE-AT-END" in text
+    assert "chars cut" in text and len(text) < 1600
+    assert context.render(user("short")) == "USER: short"     # short messages untouched

@@ -39,7 +39,7 @@ fixes to the stage-1 code found while reading it.
 Current state: **112 offline tests pass** (`tests/`, no model or network), and the **eval baseline
 is 60/60** (12 cases × 5 runs against the live model). Two harder cases added since
 are measured separately (see [Harder eval cases](#harder-eval-cases)): `rename_across_files` 18/19,
-`remember_after_compaction` 0/10.
+`remember_after_compaction` 10/10 (0/10 before a compaction fix it found).
 
 ## What was built
 
@@ -61,7 +61,8 @@ Found by reading the code before adding anything:
 system prompt first. Before every request the harness estimates the size (3 chars/token, measured on
 this model) and, past 75% of the window (`NANO_COMPACT_AT`), shrinks the history cheapest step first:
 shorten old tool outputs, then summarize earlier turns with the model, then shorten older outputs in
-the current turn. Verified live: an earlier turn became an accurate 170-word summary and the model
+the current turn. The summarizer sees the start and end of each long message (the end was
+missing until `remember_after_compaction` showed a note after a pasted log being lost). Verified live: an earlier turn became an accurate 170-word summary and the model
 carried on correctly.
 
 **Streaming** (`client.py`). Replies print as they are generated; reasoning streams in grey. Measured
@@ -188,6 +189,11 @@ harness, not the model: `transcript()` cuts each message to its first 1500 chars
 summarizer never sees it (a test, `test_the_probe_path_never_reaches_the_summarizer`, pins this).
 The summaries instead spent words quoting random log lines.
 
+**Fixed:** the summarizer now gets the first 1000 and the last 500 chars of each long message, with
+the cut marked (`clip()` in `context.py`). Rerun, 10 runs over both servers: **10/10** (was 0/10),
+the probe path in every summary. So the case is at the ceiling again: it guards the fix but can no
+longer show an improvement.
+
 Simplification: the history is compacted in one go. A real session would have compacted in stages as
 it grew, summarizing summaries, which is probably lossier.
 
@@ -221,10 +227,11 @@ Recommended or noticed while adding `--hosts`, not done yet:
 
 ### Compaction (found by `remember_after_compaction`)
 
-- **Keep the end of long messages for the summarizer (recommended next).** Render the head *and* the
-  tail of each message (e.g. first 1000 + last 500 chars) instead of the first 1500. Notes after a
-  paste, and conclusions at the end of long replies, are where the facts usually are. Then rerun the
-  case: it should go from 0/10, and the pinning test gets deleted.
+- ~~Keep the end of long messages for the summarizer~~: done, 0/10 → 10/10.
+- **A fact in the middle of a long message is still lost.** Head and tail cover notes placed before
+  or after a paste, not one inside it. Making that case pass needs the summarizer to see more than
+  a fixed slice of each message (e.g. sending long messages to it in chunks), which costs model calls.
+  Worth it only if it turns up in use.
 - **Make the summary prompt say what to keep.** Ask explicitly for user instructions, constraints and
   decisions (the latest one where they changed) and to skip log contents. The model already kept the
   latest port 10/10; the log quoting is the waste to cut.
@@ -239,6 +246,9 @@ Recommended or noticed while adding `--hosts`, not done yet:
   mentioning that the summary had no such detail. A fix for the summarizer hides this rather than
   curing it; a rule in the prompt ("if the summary lacks something the user refers to, say so and
   ask") could be tested on this case with the summarizer left as it is.
+  Now that the fix makes the case pass, testing this needs a variant where the fact is truly lost,
+  e.g. the probe note in the middle of the paste, and a check that the answer says it can't find the
+  path instead of inventing one. Recommended as the next honesty case.
 
 - **The model doesn't delegate on its own.** When asked it now does so reliably (15/15), but unprompted
   it never has. So far that hasn't mattered: on the big-project case it used `grep` and partial reads

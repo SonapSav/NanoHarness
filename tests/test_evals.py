@@ -173,12 +173,10 @@ def test_a_run_that_remembers_everything_passes_after_compaction(monkeypatch):
     assert r["passed"], [c for c in r["checks"] if not c["ok"]]
 
 
-def test_the_probe_path_never_reaches_the_summarizer():
-    # Why remember_after_compaction fails: each message is cut to SUMMARY_INPUT_CHARS before
-    # summarizing, and the path comes at the end of a long pasted log. Delete this test when
-    # compaction keeps it.
+def test_every_planted_fact_reaches_the_summarizer():
+    # The probe path comes after a long pasted log: it used to be cut before summarizing.
     from nanoharness import context
     old = cases.STATUS_HISTORY
     text = context.transcript(context.elide(old, range(len(old))))
-    assert "9310" in text and "never modify" in text
-    assert "_probe/ready" not in text
+    for fact in ["never modify", "don't edit app.py", "8421", "9310", "/_probe/ready"]:
+        assert fact in text, fact

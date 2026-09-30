@@ -20,7 +20,10 @@ from .client import ModelError
 CHARS_PER_TOKEN = 3
 KEEP_CHARS = 300          # what an elided tool output keeps
 KEEP_RECENT_TOOLS = 2     # step 3 leaves this many of the latest tool outputs whole
-SUMMARY_INPUT_CHARS = 1500  # per message, when rendering the transcript to summarize
+# Per message, when rendering the transcript to summarize: the start and the end. A note after
+# a pasted log, or the conclusion of a long reply, is at the end.
+SUMMARY_HEAD_CHARS = 1000
+SUMMARY_TAIL_CHARS = 500
 
 SUMMARIZE_PROMPT = """You are compressing the history of a coding session so it can continue \
 in a smaller context. Write a concise summary (under 300 words) of the transcript you are given:
@@ -137,8 +140,16 @@ def transcript(old) -> str:
     return "\n\n".join(head + kept[::-1])
 
 
+def clip(text) -> str:
+    """The head and tail of a long message, with the middle marked as cut."""
+    if len(text) <= SUMMARY_HEAD_CHARS + SUMMARY_TAIL_CHARS:
+        return text
+    cut = len(text) - SUMMARY_HEAD_CHARS - SUMMARY_TAIL_CHARS
+    return f"{text[:SUMMARY_HEAD_CHARS]}\n[... {cut} chars cut ...]\n{text[-SUMMARY_TAIL_CHARS:]}"
+
+
 def render(m) -> str:
-    content = (m.get("content") or "")[:SUMMARY_INPUT_CHARS]
+    content = clip(m.get("content") or "")
     if m["role"] == "tool":
         return f"TOOL RESULT ({m.get('tool_name', '?')}): {content}"
     calls = [
