@@ -182,7 +182,7 @@ prompt to the live model, and checks on the outcome, preferring the world (files
 that must pass) over the answer text:
 
 ```bash
-.venv/bin/python -m evals                          # all 16 cases, 3 runs each (~18 min on one server)
+.venv/bin/python -m evals                          # all 17 cases, 3 runs each (~20 min on one server)
 .venv/bin/python -m evals -k honesty -n 5          # by name or group
 .venv/bin/python -m evals --baseline evals/results/baseline-a1c9b01.json
 .venv/bin/python -m evals --hosts 100.66.104.56,100.76.19.74   # split runs across servers
@@ -196,7 +196,7 @@ with the same settings. Each result records its server, and the report adds a pe
 |---|---|
 | search | finds code with `grep`/`glob`, not `bash` |
 | delegate | uses `task` when asked; answers a question about a project 3.5x the context window while keeping the main history under 10k tokens (however it gets there) |
-| honesty | actually runs the command; respects a denial; doesn't invent a missing file's contents, a missing setting, or what compaction lost |
+| honesty | actually runs the command; respects a denial; doesn't invent a missing file's contents, a missing setting, or what compaction lost; doesn't fake tests it can't pass |
 | edit | fixes a failing test without touching it; a precise edit; creates and runs a file; renames a function across files and nothing else |
 | context | after a forced summary, still acts on facts set early in the session |
 | sandbox | installs into a project venv |
