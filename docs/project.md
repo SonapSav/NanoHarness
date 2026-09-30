@@ -36,11 +36,11 @@ Beyond the plan: an eval set for the live model (`93a2bfe`), reasoning mode on b
 (`2d5302b`), a project file listing in the main and subagent prompts (`914b5bb`, `4295af3`), and five
 fixes to the stage-1 code found while reading it.
 
-Current state: **126 offline tests pass** (`tests/`, no model or network), and the **eval baseline
+Current state: **127 offline tests pass** (`tests/`, no model or network), and the **eval baseline
 is 60/60** (12 cases × 5 runs against the live model). Two harder cases added since
 are measured separately (see [Harder eval cases](#harder-eval-cases)): `rename_across_files` 18/19,
 `remember_after_compaction` 10/10 (0/10 before a compaction fix it found),
-`admits_what_compaction_lost` 8/10 (0/10 before `search_history`).
+`admits_what_compaction_lost` 18/20 (0/10 before `search_history`).
 
 ## What was built
 
@@ -129,7 +129,8 @@ never compacts sees the same tools as before. It returns a snippet around each m
 message (a pasted paragraph can be one 3000-char line), at most 3 per message so one noisy message
 cannot crowd out the rest, and it searches tool-call arguments too. The summary header points to
 it. Built because telling the model not to guess failed three times (0/30); with the tool it
-searched in every run and `admits_what_compaction_lost` went to 8/10.
+searched in every run and `admits_what_compaction_lost` went to 8/10, then 18/20 once each result
+said what to do when the detail isn't in it.
 
 **Venv rule for the sandbox.** Installs outside `WORKDIR` vanish between commands, and a subagent spent
 11 calls failing to install pytest. The prompts now say to install into a project `.venv`; live runs
@@ -302,10 +303,18 @@ Recommended or noticed while adding `--hosts`, not done yet:
     histories still force a summary. Results for both compaction cases before this change used the
     old fixture.
   **Still open:**
-  - One run searched `ops thread|readiness|port 9310`, missed (the line says "load balancer: it
-    probes GET /_probe/ready"), then guessed `/readiness` and said "Done". After an empty search it
-    still invents rather than searching again or saying so. Something to try: the "No matches"
-    result could say so plainly ("nothing found: do not guess, try other words or ask").
+  - ~~After a search that misses, it guesses~~: partly fixed. The failing run's search was not
+    empty: it matched only the assistant's "noted the readiness probe requirement" line. So every
+    result now ends with advice: with matches, "If none of this states the exact detail you need,
+    search again with other words"; with none, "Try other words (single keywords work best)"; both
+    add "If the detail isn't there, don't guess it: tell the user it's missing and ask." 20 runs:
+    **18/20** (was 8/10). One run's first search missed, it searched again and found the path,
+    which the earlier batch never did. Two still guessed after seeing the advice: one searched once
+    and ignored it; in the other, `ops|...` matched the `From: opsN@` header of every email, so the
+    3 snippets allowed for the thread were all headers, and a narrowed search missed too.
+  - **A common word can use up a message's 3 snippets** (the `ops` case above). Ideas: within a
+    message, show first the snippets that match the rarer alternatives of the pattern, or the most
+    distinct alternatives. Not tried.
   - One run never searched and guessed straight away.
   - One run called `list_directory`, a tool that doesn't exist (it got the usual error and carried
     on). Worth watching for.
