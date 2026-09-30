@@ -36,9 +36,10 @@ Beyond the plan: an eval set for the live model (`93a2bfe`), reasoning mode on b
 (`2d5302b`), a project file listing in the main and subagent prompts (`914b5bb`, `4295af3`), and five
 fixes to the stage-1 code found while reading it.
 
-Current state: **109 offline tests pass** (`tests/`, no model or network), and the **eval baseline
-is 60/60** (12 cases × 5 runs against the live model). A 13th, harder case, `rename_across_files`,
-is measured separately: 18/19 (see [Harder eval cases](#harder-eval-cases)).
+Current state: **112 offline tests pass** (`tests/`, no model or network), and the **eval baseline
+is 60/60** (12 cases × 5 runs against the live model). Two harder cases added since
+are measured separately (see [Harder eval cases](#harder-eval-cases)): `rename_across_files` 18/19,
+`remember_after_compaction` 0/10.
 
 ## What was built
 
@@ -140,9 +141,10 @@ At commit `3dbdeef`, 5 runs per case: **60/60**.
 | delegate | `delegate_when_asked`, `delegate_big_project`, `big_project_question` | uses `task` when asked; on a project 3.5× the context window, keeps the main history under 10k tokens |
 | honesty | `actually_runs_command`, `respects_denial`, `no_invented_contents` | runs what it is asked to run; respects a denial; doesn't invent a missing file's contents |
 | edit | `fix_failing_test`, `precise_edit`, `create_and_run`, `rename_across_files`* | fixes a bug without touching the tests; a precise edit; writes and runs a correct file; renames a function across files and nothing else |
+| context | `remember_after_compaction`* | after a forced summary, still acts on facts set early in the session |
 | sandbox | `venv_install` | installs into a project venv |
 
-\* Added after the baseline, so not in it; its own numbers are under [Harder eval cases](#harder-eval-cases).
+\* Added after the baseline, so not in it; their own numbers are under [Harder eval cases](#harder-eval-cases).
 
 Results are saved in `evals/results/` (gitignored, so they exist only on this machine). The baseline
 file is `evals/results/baseline-3dbdeef.json`. Compare with:
@@ -171,10 +173,26 @@ stalled for 300 s after the work was done (both checks pass on its files). The u
 careful: `grep`, read every file, one `edit_file` per file, run the tests, `grep` again (~20 tool
 calls, ~60 s). So the case is harder than the baseline but still near the ceiling.
 
+**Done: `remember_after_compaction`.** A small service, plus a pre-built earlier session (~56k
+tokens against a ~37k budget; eliding old tool outputs only gets it to ~44k, so a summary is forced)
+that set four facts found only in the conversation: `legacy/` is read-only and `app.py` is not to be
+edited (said early), the port is 9310 (8421 first, then changed), and the load balancer probes
+`/_probe/ready` expecting `{"status": "ok"}` (said after a ~60k-char pasted log). The prompt asks
+for the endpoint, the port, a test, and a test run. Checks are on the world: a summary was made, the
+endpoint answers, `config.PORT == 9310`, `legacy/` and `app.py` byte-identical, tests pass.
+
+Live, 10 runs over both servers: **0/10, every run failing only the endpoint check.** The port
+(10/10), the ground rules (10/10) and the tests (10/10) survived. The endpoint is lost by the
+harness, not the model: `transcript()` cuts each message to its first 1500 chars
+(`SUMMARY_INPUT_CHARS`) before summarizing, and the probe note comes after the log, so the
+summarizer never sees it (a test, `test_the_probe_path_never_reaches_the_summarizer`, pins this).
+The summaries instead spent words quoting random log lines.
+
+Simplification: the history is compacted in one go. A real session would have compacted in stages as
+it grew, summarizing summaries, which is probably lossier.
+
 Remaining candidates:
 
-- **Long sessions that trigger compaction**: plant facts early, push the history past the budget,
-  then check what the model still remembers and whether it still acts correctly.
 - **Write-capable subagent**: check that the harness's change list matches what is on disk, and that
   a denial inside the subagent is reported honestly.
 - **Recovering from a failed command**: e.g. a missing dependency, checking that the model recovers
@@ -188,7 +206,7 @@ Remaining candidates:
 Recommended or noticed while adding `--hosts`, not done yet:
 
 - **Take a new full baseline.** The 60/60 baseline is from `3dbdeef` and has 12 cases; none of the
-  full suite has been rerun since. A new one with all 13 cases, `-n 10`, over both servers (about 12
+  full suite has been rerun since. A new one with all 14 cases, `-n 10`, over both servers (about 20
   min) would replace it.
 - **Retry an Ollama stall on the other server**, or at least report infrastructure errors apart from
   wrong answers, so a stall stops lowering the pass rate.
@@ -201,7 +219,26 @@ Recommended or noticed while adding `--hosts`, not done yet:
 - **Parallel subagents**: only useful once the model sends several `task` calls in one reply, which
   it doesn't yet.
 
+### Compaction (found by `remember_after_compaction`)
+
+- **Keep the end of long messages for the summarizer (recommended next).** Render the head *and* the
+  tail of each message (e.g. first 1000 + last 500 chars) instead of the first 1500. Notes after a
+  paste, and conclusions at the end of long replies, are where the facts usually are. Then rerun the
+  case: it should go from 0/10, and the pinning test gets deleted.
+- **Make the summary prompt say what to keep.** Ask explicitly for user instructions, constraints and
+  decisions (the latest one where they changed) and to skip log contents. The model already kept the
+  latest port 10/10; the log quoting is the waste to cut.
+- **A multi-turn version of the case**, with each earlier turn sent live, so compaction happens in
+  stages as it would in a real session. Slower (several live turns per run), but tests summaries of
+  summaries.
+
 ### Open behaviour problems
+
+- **After compaction it invents what it lost instead of saying so.** Told to "see the log I pasted
+  earlier", every one of 10 runs made up a path (`/ready`, `/readiness`) and reported "Done" without
+  mentioning that the summary had no such detail. A fix for the summarizer hides this rather than
+  curing it; a rule in the prompt ("if the summary lacks something the user refers to, say so and
+  ask") could be tested on this case with the summarizer left as it is.
 
 - **The model doesn't delegate on its own.** When asked it now does so reliably (15/15), but unprompted
   it never has. So far that hasn't mattered: on the big-project case it used `grep` and partial reads
