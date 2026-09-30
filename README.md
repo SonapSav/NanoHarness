@@ -4,7 +4,7 @@ A coding agent harness built from scratch. No SDKs, no dependencies — stdlib o
 so the wire format between you and the model stays visible.
 
 Streaming, context compaction, `grep`/`glob`, saved sessions, subagents (read-only or
-write-capable) and a bubblewrap sandbox for `bash`. 127 offline tests; eval baseline 60/60
+write-capable) and a bubblewrap sandbox for `bash`. 128 offline tests; eval baseline 60/60
 against the live model. What was planned, what's done and what's pending:
 [`docs/project.md`](docs/project.md).
 

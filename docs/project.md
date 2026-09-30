@@ -36,7 +36,7 @@ Beyond the plan: an eval set for the live model (`93a2bfe`), reasoning mode on b
 (`2d5302b`), a project file listing in the main and subagent prompts (`914b5bb`, `4295af3`), and five
 fixes to the stage-1 code found while reading it.
 
-Current state: **127 offline tests pass** (`tests/`, no model or network), and the **eval baseline
+Current state: **128 offline tests pass** (`tests/`, no model or network), and the **eval baseline
 is 60/60** (12 cases × 5 runs against the live model). Two harder cases added since
 are measured separately (see [Harder eval cases](#harder-eval-cases)): `rename_across_files` 18/19,
 `remember_after_compaction` 10/10 (0/10 before a compaction fix it found),
@@ -312,9 +312,20 @@ Recommended or noticed while adding `--hosts`, not done yet:
     which the earlier batch never did. Two still guessed after seeing the advice: one searched once
     and ignored it; in the other, `ops|...` matched the `From: opsN@` header of every email, so the
     3 snippets allowed for the thread were all headers, and a narrowed search missed too.
-  - **A common word can use up a message's 3 snippets** (the `ops` case above). Ideas: within a
-    message, show first the snippets that match the rarer alternatives of the pattern, or the most
-    distinct alternatives. Not tried.
+  - ~~A common word can use up a message's 3 snippets~~: fixed. `search_history` now finds every
+    match first and ranks by how often the matched text occurs across the archive: each message shows
+    its 3 rarest, and past 20 in total the rarest 20 are kept. Replaying the 28 distinct patterns
+    the model used live against the real archive: 20 find the path, including the `ops|...` one
+    that failed; the other 8 contain no word from the probe line, which no ranking can fix. Live, 20
+    runs: **18/20** again (no run happened to use a common word). In both failures the path never
+    reached the model: one never searched, one searched `ops thread|readiness`, got only the
+    assistant's "noted the probe requirement" line, and ignored the advice to search again. Every
+    run whose results held the path passed (18/18).
+  - **What is left is the model's side:** searching with words that aren't in the text and not
+    trying again, or not searching at all (2 of 20). Ideas, not tried: have the header or the tool
+    description suggest searching for the user's own words from the request ("readiness endpoint
+    the load balancer probes" → `load balancer`); or, when a result holds no match from a user
+    message, say so ("only your own earlier replies matched").
   - One run never searched and guessed straight away.
   - One run called `list_directory`, a tool that doesn't exist (it got the usual error and carried
     on). Worth watching for.
