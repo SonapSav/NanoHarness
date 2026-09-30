@@ -3,11 +3,12 @@
 Every case exists because of something we tuned or saw go wrong; the comment says what.
 To add one: give it files, a prompt, and checks that look at the world where possible.
 """
+import re
 from dataclasses import dataclass, field
 
 from .checks import (answer_lacks, answer_matches, called, command_output, context_under,
                      file_equals,
-                     file_exists, file_missing, no_command_matching, not_called)
+                     file_exists, files_equal, file_missing, no_command_matching, not_called)
 
 
 @dataclass
@@ -86,6 +87,109 @@ CALC = {
         "    def test_mul(self):\n        self.assertEqual(mul(2, 3), 6)\n"
     ),
 }
+
+# A rename that spans files. The traps, each a way a plausible strategy goes wrong:
+# a lookalike (calc_total_weight) that a blind substring replace breaks; references by
+# string (__all__, a getattr table) that following imports misses; a README mention.
+SHOP = {
+    "README.md": (
+        "# shop\n\n"
+        "Use `calc_total(items, tax_rate)` for an order's total and\n"
+        "`calc_total_weight(items)` for its shipping weight.\n"
+    ),
+    "shop/__init__.py": (
+        "from .pricing import calc_total, calc_total_weight\n"
+        "\n"
+        "__all__ = [\"calc_total\", \"calc_total_weight\"]\n"
+    ),
+    "shop/pricing.py": (
+        "def calc_total(items, tax_rate):\n"
+        "    \"\"\"Price of (price, qty, weight) items, tax included.\"\"\"\n"
+        "    subtotal = sum(price * qty for price, qty, _ in items)\n"
+        "    return round(subtotal * (1 + tax_rate), 2)\n"
+        "\n"
+        "\n"
+        "def calc_total_weight(items):\n"
+        "    return sum(qty * weight for _, qty, weight in items)\n"
+    ),
+    "shop/cart.py": (
+        "from .pricing import calc_total\n"
+        "\n"
+        "TAX = 0.2\n"
+        "\n"
+        "\n"
+        "class Cart:\n"
+        "    def __init__(self):\n"
+        "        self.items = []\n"
+        "\n"
+        "    def add(self, price, qty=1, weight=1.0):\n"
+        "        self.items.append((price, qty, weight))\n"
+        "\n"
+        "    def total(self):\n"
+        "        return calc_total(self.items, TAX)\n"
+    ),
+    "shop/checkout.py": (
+        "from . import pricing\n"
+        "\n"
+        "SHIPPING_PER_KG = 1.5\n"
+        "\n"
+        "\n"
+        "def invoice(cart):\n"
+        "    goods = pricing.calc_total(cart.items, cart_tax(cart))\n"
+        "    shipping = round(pricing.calc_total_weight(cart.items) * SHIPPING_PER_KG, 2)\n"
+        "    return {\"goods\": goods, \"shipping\": shipping, \"due\": round(goods + shipping, 2)}\n"
+        "\n"
+        "\n"
+        "def cart_tax(cart):\n"
+        "    from .cart import TAX\n"
+        "    return TAX\n"
+    ),
+    "shop/report.py": (
+        "from . import pricing\n"
+        "\n"
+        "# Metric name -> function in pricing, looked up by name so reports stay configurable.\n"
+        "METRICS = {\"total\": \"calc_total\", \"weight\": \"calc_total_weight\"}\n"
+        "\n"
+        "\n"
+        "def metric(name, items, *args):\n"
+        "    return getattr(pricing, METRICS[name])(items, *args)\n"
+    ),
+    "tests/__init__.py": "",
+    "tests/test_shop.py": (
+        "import unittest\n"
+        "\n"
+        "import shop\n"
+        "from shop import checkout, report\n"
+        "from shop.cart import Cart\n"
+        "from shop.pricing import calc_total, calc_total_weight\n"
+        "\n"
+        "ITEMS = [(10.0, 2, 0.5), (5.0, 1, 2.0)]\n"
+        "\n"
+        "\n"
+        "class T(unittest.TestCase):\n"
+        "    def test_total(self):\n"
+        "        self.assertEqual(calc_total(ITEMS, 0.2), 30.0)\n"
+        "\n"
+        "    def test_weight(self):\n"
+        "        self.assertEqual(calc_total_weight(ITEMS), 3.0)\n"
+        "\n"
+        "    def test_exports(self):\n"
+        "        self.assertEqual(set(shop.__all__), {\"calc_total\", \"calc_total_weight\"})\n"
+        "\n"
+        "    def test_cart_and_invoice(self):\n"
+        "        cart = Cart()\n"
+        "        cart.add(10.0, 2, 0.5)\n"
+        "        cart.add(5.0, 1, 2.0)\n"
+        "        self.assertEqual(cart.total(), 30.0)\n"
+        "        self.assertEqual(checkout.invoice(cart), {\"goods\": 30.0, \"shipping\": 4.5, \"due\": 34.5})\n"
+        "\n"
+        "    def test_report(self):\n"
+        "        self.assertEqual(report.metric(\"total\", ITEMS, 0.2), 30.0)\n"
+        "        self.assertEqual(report.metric(\"weight\", ITEMS), 3.0)\n"
+    ),
+}
+SHOP_RENAMED = {path: re.sub(r"\bcalc_total\b", "order_total", text) for path, text in SHOP.items()}
+
 
 def big_project():
     """~60 modules of ~250 lines (~175k tokens: over 3x the whole context window). The
@@ -207,6 +311,12 @@ CASES = [
          "Create fizzbuzz.py that prints FizzBuzz for 1 to 15, one per line, then run it.",
          [command_output("python3 fizzbuzz.py", FIZZBUZZ, name="fizzbuzz.py output is right"),
           called("bash")]),
+    Case("rename_across_files", "edit",
+         "Rename the function calc_total to order_total everywhere in this project, "
+         "tests and docs included. Rename nothing else. The tests must still pass.",
+         [command_output("python3 -m unittest discover -s tests -t . -q", name="tests pass"),
+          files_equal(SHOP_RENAMED)],
+         files=SHOP),
 
     # --- sandbox: install into a project venv (tuned via the prompt) ---
     Case("venv_install", "sandbox",

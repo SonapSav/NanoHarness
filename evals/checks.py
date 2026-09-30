@@ -92,6 +92,29 @@ def file_equals(path, expected):
     return Check(f"{path} has the expected content", fn)
 
 
+def files_equal(expected):
+    """Every file in `expected` ({path: text}) has exactly that content. The detail names
+    each file that differs and its first differing line, so a failure says where."""
+    def fn(r):
+        bad = []
+        for path, want in expected.items():
+            p = r.workdir / path
+            if not p.exists():
+                bad.append(f"{path} missing")
+                continue
+            got = p.read_text()
+            if got != want:
+                pairs = zip(got.splitlines() + [""], want.splitlines() + [""])
+                diff = next(((i, g, w) for i, (g, w) in enumerate(pairs, 1) if g != w), None)
+                if diff is None:     # same lines, different line endings or final newline
+                    bad.append(f"{path}: whitespace at line ends differs")
+                else:
+                    n, g, w = diff
+                    bad.append(f"{path}:{n} got {g.strip()!r}, want {w.strip()!r}")
+        return not bad, "; ".join(bad) if bad else f"all {len(expected)} exact"
+    return Check(f"all {len(expected)} files have the expected content", fn)
+
+
 def file_exists(path):
     return Check(f"{path} exists", lambda r: ((r.workdir / path).exists(), ""))
 
