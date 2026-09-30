@@ -4,7 +4,7 @@ A coding agent harness built from scratch. No SDKs, no dependencies — stdlib o
 so the wire format between you and the model stays visible.
 
 Streaming, context compaction, `grep`/`glob`, saved sessions, subagents (read-only or
-write-capable) and a bubblewrap sandbox for `bash`. 105 offline tests; eval baseline 60/60
+write-capable) and a bubblewrap sandbox for `bash`. 109 offline tests; eval baseline 60/60
 against the live model. What was planned, what's done and what's pending:
 [`docs/project.md`](docs/project.md).
 
@@ -183,7 +183,12 @@ that must pass) over the answer text:
 .venv/bin/python -m evals                          # all 13 cases, 3 runs each (~11 min)
 .venv/bin/python -m evals -k honesty -n 5          # by name or group
 .venv/bin/python -m evals --baseline evals/results/baseline-3dbdeef.json
+.venv/bin/python -m evals --hosts 100.66.104.56,100.76.19.74   # split runs across servers
 ```
+
+With `--hosts` (or `NANO_EVAL_HOSTS`), each server gets a worker process that takes the next
+run from a shared queue; two servers halve the time. They must serve the same model build
+with the same settings. Each result records its server, and the report adds a per-server line.
 
 | group | what it checks |
 |---|---|

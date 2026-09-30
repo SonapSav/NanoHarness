@@ -3,6 +3,7 @@
     .venv/bin/python -m evals                     # every case, 3 runs each
     .venv/bin/python -m evals -k honesty -n 5     # cases whose name or group contains 'honesty'
     .venv/bin/python -m evals --baseline evals/results/<earlier>.json
+    .venv/bin/python -m evals --hosts 100.66.104.56,100.76.19.74   # split runs across servers
 
 Each run gets a fresh temp workdir, no session file, and its own approvals. Results
 (checks, answers, full transcripts) go to evals/results/<timestamp>.json.
@@ -11,6 +12,9 @@ import argparse
 import builtins
 import io
 import json
+import multiprocessing
+import os
+import queue
 import re
 import shutil
 import subprocess
@@ -97,6 +101,81 @@ def run_case(case, keep=False):
     }
 
 
+def crashed(case, error):
+    """The result of a run that raised instead of finishing: failed, with the reason."""
+    return {"case": case.name, "group": case.group, "passed": False, "checks": [],
+            "error": error, "answer": "", "tools": {}, "sub_tools": {}, "prompts": 0,
+            "rounds": 0, "tokens": 0, "seconds": 0.0, "stopped": None, "workdir": None,
+            "stdout": "", "messages": []}
+
+
+def worker(host, jobs, results):
+    """One per Ollama server: take (index, case name, keep) jobs until a None arrives.
+    Pulling from a shared queue means a slower server simply takes fewer runs."""
+    config.OLLAMA_HOST = host
+    by_name = {c.name: c for c in CASES}
+    while (job := jobs.get()) is not None:
+        index, name, keep = job
+        try:
+            r = run_case(by_name[name], keep=keep)
+        except Exception as e:    # report it; a lost result would leave the parent waiting
+            r = crashed(by_name[name], f"runner raised {type(e).__name__}: {e}")
+        r["host"] = host
+        results.put((index, r))
+
+
+def host_url(host):
+    """'100.76.19.74' -> 'http://100.76.19.74:11434'; full URLs pass through."""
+    host = host.strip().rstrip("/")
+    if "://" not in host:
+        host = f"http://{host}"
+    if host.count(":") < 2:
+        host += ":11434"
+    return host
+
+
+def run_all(jobs, hosts, keep, show):
+    """Run (case, i) jobs, in order on one host or spread over several. Returns results in
+    job order; `show(done, index, result)` is called as each one finishes."""
+    if len(hosts) == 1:
+        saved, config.OLLAMA_HOST = config.OLLAMA_HOST, hosts[0]
+        try:
+            runs = []
+            for index, (case, _) in enumerate(jobs):
+                r = run_case(case, keep=keep)
+                r["host"] = hosts[0]
+                runs.append(r)
+                show(len(runs), index, r)
+            return runs
+        finally:
+            config.OLLAMA_HOST = saved
+
+    # A process per host, not a thread: run_case swaps config.WORKDIR and builtins.input.
+    ctx = multiprocessing.get_context("spawn")
+    todo, done = ctx.Queue(), ctx.Queue()
+    for index, (case, _) in enumerate(jobs):
+        todo.put((index, case.name, keep))
+    for _ in hosts:
+        todo.put(None)
+    procs = [ctx.Process(target=worker, args=(h, todo, done), daemon=True) for h in hosts]
+    for proc in procs:
+        proc.start()
+    runs = {}
+    while len(runs) < len(jobs):
+        try:
+            index, r = done.get(timeout=5)
+        except queue.Empty:
+            if not any(proc.is_alive() for proc in procs):
+                break             # every worker died; don't wait forever
+            continue
+        runs[index] = r
+        show(len(runs), index, r)
+    for proc in procs:
+        proc.join(timeout=10)
+    return [runs.get(i) or crashed(case, "worker died before finishing this run")
+            for i, (case, _) in enumerate(jobs)]
+
+
 def summarize(runs):
     """Per-case aggregates, in case order."""
     by_case = {}
@@ -141,6 +220,15 @@ def report(summary, runs, baseline=None):
         total_runs += s["runs"]
     lines += ["-" * len(head), f"{'total':<34}{total:>4}/{total_runs}  ({100 * total // max(total_runs, 1)}%)"]
 
+    hosts = {}
+    for r in runs:
+        hosts.setdefault(r.get("host"), []).append(r)
+    if len(hosts) > 1:            # the servers should be interchangeable; show if they aren't
+        lines.append("by host:")
+        for host, rs in hosts.items():
+            secs = sum(r["seconds"] for r in rs) / len(rs)
+            lines.append(f"  {host:<32}{sum(r['passed'] for r in rs):>4}/{len(rs):<4}{secs:>8.1f}s avg")
+
     failures = [r for r in runs if not r["passed"]]
     if failures:
         lines += ["", "failures:"]
@@ -165,6 +253,9 @@ def main(argv=None):
     p.add_argument("--baseline", type=Path, help="an earlier results file to compare against")
     p.add_argument("--out", type=Path, help="where to write results (default evals/results/<timestamp>.json)")
     p.add_argument("--keep", action="store_true", help="keep each run's workdir for inspection")
+    p.add_argument("--hosts", default=os.environ.get("NANO_EVAL_HOSTS", ""),
+                   help="comma-separated Ollama servers to split runs across, each with the same "
+                        "model (default $NANO_EVAL_HOSTS, else $OLLAMA_HOST)")
     args = p.parse_args(argv)
 
     cases = [c for c in CASES if args.filter in c.name or args.filter in c.group]
@@ -173,22 +264,25 @@ def main(argv=None):
         return 1
     baseline = json.loads(args.baseline.read_text()) if args.baseline else None
 
-    total = len(cases) * args.repeat
-    print(f"{len(cases)} cases x {args.repeat} runs against {config.MODEL} at {config.OLLAMA_HOST}")
-    runs = []
-    for case in cases:
-        for i in range(args.repeat):
-            print(f"  [{len(runs) + 1}/{total}] {case.name} #{i + 1} ... ", end="", flush=True)
-            r = run_case(case, keep=args.keep)
-            runs.append(r)
-            print(("pass" if r["passed"] else "FAIL") + f"  ({r['seconds']}s)", flush=True)
+    hosts = [host_url(h) for h in args.hosts.split(",") if h.strip()] or [config.OLLAMA_HOST]
+    jobs = [(case, i) for case in cases for i in range(args.repeat)]
+    print(f"{len(cases)} cases x {args.repeat} runs against {config.MODEL} at {', '.join(hosts)}")
+
+    def show(done, index, r):
+        case, i = jobs[index]
+        where = f"  {r['host']}" if len(hosts) > 1 else ""
+        print(f"  [{done}/{len(jobs)}] {case.name} #{i + 1}  " + ("pass" if r["passed"] else "FAIL")
+              + f"  ({r['seconds']}s){where}", flush=True)
+
+    runs = run_all(jobs, hosts, args.keep, show)
 
     summary = summarize(runs)
     result = {
         "when": datetime.now().isoformat(timespec="seconds"),
         "commit": git_commit(),
         "config": {"model": config.MODEL, "num_ctx": config.NUM_CTX, "temperature": config.TEMPERATURE,
-                   "think": config.THINK, "max_steps": config.MAX_STEPS, "sandbox": config.SANDBOX},
+                   "think": config.THINK, "max_steps": config.MAX_STEPS, "sandbox": config.SANDBOX,
+                   "hosts": hosts},
         "summary": summary,
         "runs": runs,
     }

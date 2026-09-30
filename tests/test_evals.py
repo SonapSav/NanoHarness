@@ -103,3 +103,48 @@ def test_missing_the_string_references_fails_the_tests(monkeypatch):
     checks, r = rename_run(monkeypatch, imports_only)
     assert not checks["tests pass"]["ok"]
     assert "shop/report.py" in next(c for n, c in checks.items() if n.startswith("all "))["detail"]
+
+
+def test_host_url_fills_in_scheme_and_port():
+    assert run.host_url("100.76.19.74") == "http://100.76.19.74:11434"
+    assert run.host_url(" http://box:9999/ ") == "http://box:9999"
+
+
+def test_worker_tags_each_result_with_its_host_and_survives_a_crash(monkeypatch):
+    import queue
+    real = run.run_case
+
+    def run_case(c, keep=False):
+        if c.name == "precise_edit":
+            raise RuntimeError("boom")
+        return real(c, keep)
+
+    monkeypatch.setattr(run, "run_case", run_case)
+    monkeypatch.setattr(config, "OLLAMA_HOST", config.OLLAMA_HOST)   # worker sets it; restore
+    script(monkeypatch, say("No config.yaml here."))
+    jobs, results = queue.Queue(), queue.Queue()
+    for job in [(0, "no_invented_contents", False), (1, "precise_edit", False), None]:
+        jobs.put(job)
+    run.worker("http://h1:11434", jobs, results)
+    got = dict(results.get() for _ in range(2))
+    assert got[0]["host"] == got[1]["host"] == "http://h1:11434"
+    assert got[0]["passed"]
+    assert not got[1]["passed"] and "RuntimeError: boom" in got[1]["error"]
+
+
+def test_several_hosts_run_in_worker_processes_and_keep_job_order():
+    # Real processes, so no scripted model: closed local ports make every run fail fast.
+    hosts = ["http://127.0.0.1:9", "http://127.0.0.1:19"]
+    jobs = [(case("no_invented_contents"), i) for i in range(3)] + [(case("precise_edit"), 0)]
+    seen = []
+    runs = run.run_all(jobs, hosts, keep=False, show=lambda done, i, r: seen.append(i))
+    assert [r["case"] for r in runs] == ["no_invented_contents"] * 3 + ["precise_edit"]
+    assert all(r["host"] in hosts and "Cannot reach Ollama" in r["error"] for r in runs)
+    assert sorted(seen) == [0, 1, 2, 3]
+
+
+def test_report_shows_a_line_per_host_when_there_are_several():
+    runs = [{"case": "a", "group": "g", "passed": p, "checks": [], "error": None, "tools": {},
+             "tokens": 1, "seconds": 2.0, "host": h} for p, h in [(True, "h1"), (False, "h2")]]
+    text = run.report(run.summarize(runs), runs)
+    assert "by host:" in text and "1/1" in text and "0/1" in text

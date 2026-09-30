@@ -36,7 +36,7 @@ Beyond the plan: an eval set for the live model (`93a2bfe`), reasoning mode on b
 (`2d5302b`), a project file listing in the main and subagent prompts (`914b5bb`, `4295af3`), and five
 fixes to the stage-1 code found while reading it.
 
-Current state: **105 offline tests pass** (`tests/`, no model or network), and the **eval baseline
+Current state: **109 offline tests pass** (`tests/`, no model or network), and the **eval baseline
 is 60/60** (12 cases × 5 runs against the live model). A 13th, harder case, `rename_across_files`,
 is measured separately: 18/19 (see [Harder eval cases](#harder-eval-cases)).
 
@@ -122,6 +122,14 @@ system prompt removed that: `delegate_when_asked` went from 3/5 to 10/10 and `li
 11 calls failing to install pytest. The prompts now say to install into a project `.venv`; live runs
 then went straight to venv, install, test.
 
+**Evals split across two servers** (`--hosts`). A second Ollama server on the tailnet
+(`100.76.19.74`) was checked against the first: same Ollama (0.34.4), same model digest and
+quantization, same parameters, same speed (~53 tok/s) and the same 186-token output for a seeded
+prompt. The runner gives each server its own worker process (not a thread: a run swaps
+`config.WORKDIR` and `builtins.input`) pulling from a shared queue, tags every result with its server
+and reports per-server pass rates. Live: 6 rename runs in 3m02s, 3/3 on each server, against ~6 min
+on one.
+
 ## Eval baseline
 
 At commit `3dbdeef`, 5 runs per case: **60/60**.
@@ -171,6 +179,27 @@ Remaining candidates:
   a denial inside the subagent is reported honestly.
 - **Recovering from a failed command**: e.g. a missing dependency, checking that the model recovers
   without looping through the same failing command.
+- **A harder rename** (not recommended yet): more call sites over more files, to see whether careful
+  per-file editing gives way to a blind `sed`. It would mostly measure the model's stamina rather
+  than anything the harness controls, so compaction comes first.
+
+### Using the second server
+
+Recommended or noticed while adding `--hosts`, not done yet:
+
+- **Take a new full baseline.** The 60/60 baseline is from `3dbdeef` and has 12 cases; none of the
+  full suite has been rerun since. A new one with all 13 cases, `-n 10`, over both servers (about 12
+  min) would replace it.
+- **Retry an Ollama stall on the other server**, or at least report infrastructure errors apart from
+  wrong answers, so a stall stops lowering the pass rate.
+- **Measure whether subagents on the second server keep the main cache warm.** The main agent waits
+  for a subagent either way, so there is no direct speedup. But if Ollama keeps one cached prompt per
+  model, a subagent on the same server replaces the main history's cache, and it must be
+  reprocessed afterwards (10k+ tokens). Compare time to first token after a `task` call with one and
+  two servers before building anything. Compaction summaries could move to the second server the
+  same way.
+- **Parallel subagents**: only useful once the model sends several `task` calls in one reply, which
+  it doesn't yet.
 
 ### Open behaviour problems
 
