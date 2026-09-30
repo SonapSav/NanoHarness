@@ -1,4 +1,5 @@
 """Tool registry: a JSON schema the model sees, plus a Python function that runs."""
+import difflib
 import json
 import os
 import re
@@ -24,7 +25,7 @@ class Tool:
     parameters: dict
     fn: Callable[..., str]
     writes: bool          # does it change the world? drives the permission gate
-    preview: Callable[..., str]   # one line shown in the confirmation prompt
+    preview: Callable[..., str]   # shown in the confirmation prompt (a diff for file writes)
 
 
 REGISTRY: dict[str, Tool] = {}
@@ -72,6 +73,24 @@ def truncate(text: str, limit: int = None) -> str:
     if len(text) <= limit:
         return text
     return text[:limit] + f"\n\n[truncated: showing {limit} of {len(text)} chars]"
+
+
+PREVIEW_DIFF_LINES = 40
+
+
+def diff_preview(label: str, path: str, after) -> str:
+    """`label`, then the change as a unified diff, so the user can see what they approve.
+    `after(before)` returns the new text. Never raises: on any trouble, just the label."""
+    try:
+        p = resolve(path)
+        before = p.read_text(errors="replace") if p.is_file() else ""
+        lines = list(difflib.unified_diff(before.splitlines(), after(before).splitlines(),
+                                          "a/" + path, "b/" + path, n=2, lineterm=""))[2:]
+    except Exception:
+        return label
+    if len(lines) > PREVIEW_DIFF_LINES:
+        lines = lines[:PREVIEW_DIFF_LINES] + [f"... {len(lines) - PREVIEW_DIFF_LINES} more diff lines"]
+    return "\n".join([label] + ["    " + line for line in lines])
 
 
 # --- the tools -------------------------------------------------------------
@@ -122,7 +141,8 @@ def read_file(path, offset=1, limit=400):
         "required": ["path", "content"],
     },
     writes=True,
-    preview=lambda path, content="", **kw: f"write {path} ({len(content)} chars)",
+    preview=lambda path, content="", **kw: diff_preview(
+        f"write {path} ({len(content)} chars)", path, lambda before: content),
 )
 def write_file(path, content):
     p = resolve(path)
@@ -149,7 +169,9 @@ def write_file(path, content):
         "required": ["path", "old_string", "new_string"],
     },
     writes=True,
-    preview=lambda path, **kw: f"edit {path}",
+    preview=lambda path, old_string="", new_string="", **kw: diff_preview(
+        f"edit {path}", path,
+        lambda before: before.replace(old_string, new_string) if before.count(old_string) == 1 else before),
 )
 def edit_file(path, old_string, new_string):
     p = resolve(path)

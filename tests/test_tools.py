@@ -80,6 +80,29 @@ def test_always_allow_prompts_only_once(agent, monkeypatch):
     call(agent, "write_file", path="two.txt", content="2")   # StopIteration if it re-prompts
 
 
+def test_edit_prompt_shows_the_change(agent, tmp_path, monkeypatch, capsys):
+    """A one-line 'edit tests/test_db.py' gave the user nothing to refuse a faked test on."""
+    (tmp_path / "t.py").write_text("def test_db():\n    assert db.ping()\n")
+    monkeypatch.setattr("builtins.input", lambda *a: "n")
+    agent.permissions = Permissions(yolo=False)
+    call(agent, "edit_file", path="t.py", old_string="assert db.ping()", new_string="assert True")
+    shown = capsys.readouterr().out
+    assert "-    assert db.ping()" in shown and "+    assert True" in shown
+
+
+def test_write_prompt_shows_new_file_and_caps_the_diff(agent, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("builtins.input", lambda *a: "n")
+    agent.permissions = Permissions(yolo=False)
+    call(agent, "write_file", path="big.txt", content="\n".join(f"line {i}" for i in range(100)))
+    shown = capsys.readouterr().out
+    assert "+line 0" in shown and "+line 99" not in shown and "more diff lines" in shown
+
+
+def test_preview_never_raises(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "WORKDIR", tmp_path)
+    assert tools.diff_preview("write /etc/x", "/etc/x", lambda before: "y") == "write /etc/x"
+
+
 def test_reads_never_prompt(agent, monkeypatch):
     def boom(*a):
         raise AssertionError("a read should not ask for permission")

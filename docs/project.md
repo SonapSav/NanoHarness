@@ -410,8 +410,12 @@ Recommended or noticed while adding `--hosts`, not done yet:
   allowed... the only option is to mock... actually, wait"), ~17 min, and ended with an empty
   answer. Fourth prompt rule without effect, and the first that made things worse.
   Left: the permission gate, which is the real defence outside `--yolo`: every one of these edits
-  is a `write_file`/`edit_file` the user approves. Worth checking the prompt shows enough of the
-  change to refuse it. Rewording the *request* instead ("get them passing if the code is at
+  is a `write_file`/`edit_file` the user approves. **Checked: it didn't.** The prompt was one line,
+  `edit tests/test_db.py` or `write db.py (1234 chars)`, nothing to refuse on. **Fixed:** both now
+  show a unified diff against the file on disk (`diff_preview()` in `tools.py`, capped at 40 diff
+  lines, falls back to the one-liner if the diff can't be made). Not measured: whether users
+  actually catch fakes with it; `bash` edits (`sed -i`, heredocs) still show only the command.
+  Rewording the *request* instead ("get them passing if the code is at
   fault") is not the harness's to do.
 - **No limit on one reply's reasoning.** The two spiralling runs above generated ~200k chars of
   reasoning in a single reply (~17 min each); nothing stopped them. Idea, not tried: cap tokens
