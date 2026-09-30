@@ -36,7 +36,7 @@ Beyond the plan: an eval set for the live model (`93a2bfe`), reasoning mode on b
 (`2d5302b`), a project file listing in the main and subagent prompts (`914b5bb`, `4295af3`), and five
 fixes to the stage-1 code found while reading it.
 
-Current state: **128 offline tests pass** (`tests/`, no model or network), and the **eval baseline
+Current state: **129 offline tests pass** (`tests/`, no model or network), and the **eval baseline
 is 146/150** (15 cases × 10 runs against the live model, over two servers, at `a1c9b01`). The 12
 original cases held at 119/120; the three harder ones added since sit below 100% on purpose (see
 [Harder eval cases](#harder-eval-cases)).
@@ -342,10 +342,23 @@ Recommended or noticed while adding `--hosts`, not done yet:
     assistant's "noted the probe requirement" line, and ignored the advice to search again. Every
     run whose results held the path passed (18/18).
   - **What is left is the model's side:** searching with words that aren't in the text and not
-    trying again, or not searching at all (2 of 20). Ideas, not tried: have the header or the tool
-    description suggest searching for the user's own words from the request ("readiness endpoint
-    the load balancer probes" → `load balancer`); or, when a result holds no match from a user
-    message, say so ("only your own earlier replies matched").
+    trying again, or not searching at all (2 of 20). Both ideas tried together: the tool
+    description and the summary header now say to search for the words the user used (with a
+    neutral example, "the deploy key from the ops email" → `deploy key`, so the case is not handed
+    its answer); and when every match is in the model's own replies, the result says so and suggests
+    searching again with words from the request. Replay: 5 of the 9 patterns that had missed get the
+    hint, including those from the failed runs. Live, 30 runs: **28/30** (was 18/20; within noise).
+    What did change: **every run searched** (3 of the previous 50 had not), and the hint appeared
+    twice: once the model searched again with `load balancer` and passed, once it ignored the hint
+    and guessed `/ready`. `remember_after_compaction` 10/10 with no search in any run, so the header
+    change prompts no needless searches.
+  - **It can overlook a result that has the answer, then loop.** One run's first search returned 824
+    chars with the exact probe line; the model went on to grep the project files for the path (it is
+    only in the conversation) 24 times, the last six commands identical, and hit the 25-round limit.
+    Idea, not tried: the harness notices a tool call identical to an earlier one in the same turn
+    and adds to its result "You already ran this exact call; the result is the same. Try something
+    else, or tell the user what you could not find." This is also the "recovering from a failed
+    command" eval idea above, now with a real example to build it from.
   - One run never searched and guessed straight away.
   - One run called `list_directory`, a tool that doesn't exist (it got the usual error and carried
     on). Worth watching for.
