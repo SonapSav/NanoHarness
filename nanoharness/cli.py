@@ -96,7 +96,7 @@ def main(argv=None):
 
 
 class StreamPrinter:
-    """Shows a reply as it streams: thinking in grey, the answer in plain text.
+    """Shows a reply as it streams: thinking in italic grey, the answer in plain text.
     Remembers the last complete reply so the REPL does not print it twice."""
 
     def __init__(self):
@@ -122,7 +122,7 @@ class StreamPrinter:
             print()   # thinking is over; the answer starts on its own line
         self.kind = kind
         if kind == "thinking":
-            text = f"\033[90m{text}\033[0m"
+            text = f"\033[3;90m{text}\033[0m"   # italic grey: apart from the harness's grey notes
         else:
             self.parts.append(text)
         sys.stdout.write(text)

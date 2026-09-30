@@ -65,7 +65,7 @@ the current turn. The summarizer sees the start and end of each long message (th
 missing until `remember_after_compaction` showed a note after a pasted log being lost). Verified live: an earlier turn became an accurate 170-word summary and the model
 carried on correctly.
 
-**Streaming** (`client.py`). Replies print as they are generated; reasoning streams in grey. Measured
+**Streaming** (`client.py`). Replies print as they are generated; reasoning streams in italic grey. Measured
 live: first text after 0.18 s on a reply that took 26 s in total. Mid-stream errors, truncated
 streams and dropped connections all surface as the usual model error.
 

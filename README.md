@@ -58,7 +58,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `OLLAMA_HOST` |  `http://100.66.104.56:11434` | Ollama on another machine |
 | `NANO_MODEL` | `aeroadvisor-agent:latest` | whatever `ollama list` shows |
 | `NANO_NUM_CTX` | `49152` | matches the model's Modelfile; sending less silently truncates history |
-| `NANO_THINK` | `1` | Qwen3 reasoning mode, streamed in grey. `0` is ~1.7x faster but, in evals, shipped broken code as working far more often (FizzBuzz 9/20 vs 20/20) |
+| `NANO_THINK` | `1` | Qwen3 reasoning mode, streamed in italic grey. `0` is ~1.7x faster but, in evals, shipped broken code as working far more often (FizzBuzz 9/20 vs 20/20) |
 | `NANO_STREAM` | `1` | `0` prints each reply only once it is complete |
 | `NANO_NUM_PREDICT` | `16384` | tokens one reply may generate, reasoning included; hitting it is an error (`-1` = no cap) |
 | `NANO_REVIEW` | `1` | after a turn that wrote, a separate call checks whether the change makes a check pass without fixing it, and warns you |
