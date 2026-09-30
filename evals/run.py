@@ -71,6 +71,10 @@ def run_case(case, keep=False):
 
     tool_counts = Counter(c.get("function", {}).get("name", "?")
                           for m in agent.messages for c in m.get("tool_calls") or [])
+    # Identical calls (same tool, same arguments) beyond the first: how much it went in circles.
+    same = Counter((c.get("function", {}).get("name"), json.dumps(c.get("function", {}).get("arguments"), sort_keys=True))
+                   for m in agent.messages for c in m.get("tool_calls") or [])
+    repeats = sum(n - 1 for n in same.values())
     # A subagent's history is thrown away; its calls only survive as "↳ name" lines.
     plain = re.sub(r"\x1b\[[0-9;]*m", "", out.getvalue())
     sub_counts = Counter(line.split("↳", 1)[1].strip()
@@ -91,6 +95,7 @@ def run_case(case, keep=False):
         "error": error,
         "answer": answer,
         "tools": dict(tool_counts),
+        "repeats": repeats,
         "sub_tools": dict(sub_counts),
         "prompts": len(prompts),
         "rounds": sum(1 for m in agent.messages if m["role"] == "assistant"),
@@ -193,6 +198,7 @@ def summarize(runs):
             "tools": round(sum(sum(r["tools"].values()) for r in rs) / n, 1),
             "bash": round(sum(r["tools"].get("bash", 0) for r in rs) / n, 1),
             "sub": round(sum(sum(r.get("sub_tools", {}).values()) for r in rs) / n, 1),
+            "rep": round(sum(r.get("repeats", 0) for r in rs) / n, 1),
             "tokens": round(sum(r["tokens"] for r in rs) / n),
             "seconds": round(sum(r["seconds"] for r in rs) / n, 1),
         }
@@ -203,7 +209,7 @@ def report(summary, runs, baseline=None):
     base = (baseline or {}).get("summary", {})
     head = f"{'case':<24}{'group':<10}{'pass':>7}"
     head += f"{'was':>7}" if base else ""
-    head += f"{'tools':>7}{'bash':>6}{'sub':>6}{'tokens':>8}{'secs':>7}"
+    head += f"{'tools':>7}{'bash':>6}{'sub':>6}{'rep':>5}{'tokens':>8}{'secs':>7}"
     lines = [head, "-" * len(head)]
     total = total_runs = 0
     for name, s in summary.items():
@@ -216,7 +222,7 @@ def report(summary, runs, baseline=None):
                 row += f"{b['passed']:>4}/{b['runs']:<1}{mark}"
             else:
                 row += f"{'new':>7}"
-        row += f"{s['tools']:>7}{s['bash']:>6}{s.get('sub', 0):>6}{s['tokens']:>8}{s['seconds']:>7}"
+        row += f"{s['tools']:>7}{s['bash']:>6}{s.get('sub', 0):>6}{s.get('rep', 0):>5}{s['tokens']:>8}{s['seconds']:>7}"
         lines.append(row)
         total += s["passed"]
         total_runs += s["runs"]
