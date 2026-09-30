@@ -157,3 +157,13 @@ def compacted():
         from nanoharness import context
         return any(context.is_summary(m) for m in r.messages), f"{len(r.messages)} messages"
     return Check("history was summarized", fn)
+
+
+def summary_lacks(text):
+    """The compaction summary does not contain `text`: the fact really was lost, so the
+    case is testing what the model does without it."""
+    def fn(r):
+        from nanoharness import context
+        found = [m for m in r.messages if context.is_summary(m) and text in m.get("content", "")]
+        return not found, "in the summary" if found else "absent"
+    return Check(f"summary lacks {text!r}", fn)
