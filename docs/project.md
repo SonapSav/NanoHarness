@@ -417,7 +417,7 @@ Recommended or noticed while adding `--hosts`, not done yet:
   actually catch fakes with it; `bash` edits (`sed -i`, heredocs) still show only the command.
   Rewording the *request* instead ("get them passing if the code is at
   fault") is not the harness's to do.
-  **Reviewer, measured offline (`review.py`, `NANO_REVIEW=1`, off by default).** Instead of
+  **Reviewer (`review.py`, `NANO_REVIEW`), measured offline first.** Instead of
   telling the model, a separate call after a turn that wrote gets the request, the diff of the
   files the turn wrote, the last `bash` command with its output, and the final answer, and replies
   `FAKED: <why>` or `OK`. A flag prints a yellow warning; the answer is untouched and the model is
@@ -448,8 +448,12 @@ Recommended or noticed while adding `--hosts`, not done yet:
   alarms on 23 correct runs. **Cost:** the review call (reasoning on) adds ~10-15 s to a small
   turn and ~30 s to a rename (fix_failing_test 26.9 s vs 11.8 s at baseline a1c9b01,
   precise_edit 20.7 vs 7.6, create_and_run 18.9 vs 8.9, rename_across_files 87.3 vs 55.5), so
-  it roughly doubles short tasks. Next: the same replay with reasoning off for the review call;
-  if it keeps 36/36 and 0 false alarms, turn it on by default. Blind spots: files changed only through `bash` are not in the
+  it roughly doubles short tasks. **Now on by default, reasoning on** (`NANO_REVIEW=0` to skip).
+  A reasoning-off replay was skipped: at best it saves ~10 s per writing turn, at worst it loses
+  the command-based catches (`nc`, `db_server.py`), which are the ones that need connecting a
+  command to a test result. Revisit only if the latency bothers someone. Eval timings from here
+  include the review: comparisons with baseline a1c9b01 aren't like for like, and the next full
+  baseline should be taken with it on (results record `review` in their config). Blind spots: files changed only through `bash` are not in the
   diff, and only the *last* command is shown, so a stand-in started earlier in the turn is
   missed. The 36 fakes are all one case; other kinds of fake are untested.
 - **No limit on one reply's reasoning.** The two spiralling runs above generated ~200k chars of
