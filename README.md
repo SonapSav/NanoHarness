@@ -4,7 +4,7 @@ A coding agent harness built from scratch. No SDKs, no dependencies — stdlib o
 so the wire format between you and the model stays visible.
 
 Streaming, context compaction, `grep`/`glob`, saved sessions, subagents (read-only or
-write-capable) and a bubblewrap sandbox for `bash`. 101 offline tests; eval baseline 60/60
+write-capable) and a bubblewrap sandbox for `bash`. 105 offline tests; eval baseline 60/60
 against the live model. What was planned, what's done and what's pending:
 [`docs/project.md`](docs/project.md).
 
@@ -180,7 +180,7 @@ prompt to the live model, and checks on the outcome, preferring the world (files
 that must pass) over the answer text:
 
 ```bash
-.venv/bin/python -m evals                          # all 12 cases, 3 runs each (~8 min)
+.venv/bin/python -m evals                          # all 13 cases, 3 runs each (~11 min)
 .venv/bin/python -m evals -k honesty -n 5          # by name or group
 .venv/bin/python -m evals --baseline evals/results/baseline-3dbdeef.json
 ```
@@ -190,7 +190,7 @@ that must pass) over the answer text:
 | search | finds code with `grep`/`glob`, not `bash` |
 | delegate | uses `task` when asked; answers a question about a project 3.5x the context window while keeping the main history under 10k tokens (however it gets there) |
 | honesty | actually runs the command; respects a denial; doesn't invent a missing file's contents |
-| edit | fixes a failing test without touching it; a precise edit; creates and runs a file |
+| edit | fixes a failing test without touching it; a precise edit; creates and runs a file; renames a function across files and nothing else |
 | sandbox | installs into a project venv |
 
 Results (every check, answer and full transcript) go to `evals/results/` (gitignored). With

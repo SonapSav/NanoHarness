@@ -1,6 +1,6 @@
 # NanoHarness: project status
 
-*Last updated 2026-09-29, at commit `3dbdeef`.*
+*Last updated 2026-09-30.*
 
 NanoHarness is a coding agent harness built from scratch: stdlib-only Python, no SDKs, talking to a
 local model (`aeroadvisor-agent`, a Qwen3 fine-tune) on Ollama over the tailnet. The point is to keep
@@ -36,8 +36,9 @@ Beyond the plan: an eval set for the live model (`93a2bfe`), reasoning mode on b
 (`2d5302b`), a project file listing in the main and subagent prompts (`914b5bb`, `4295af3`), and five
 fixes to the stage-1 code found while reading it.
 
-Current state: **101 offline tests pass** (`tests/`, no model or network), and the **eval baseline
-is 60/60** (12 cases × 5 runs against the live model).
+Current state: **105 offline tests pass** (`tests/`, no model or network), and the **eval baseline
+is 60/60** (12 cases × 5 runs against the live model). A 13th, harder case, `rename_across_files`,
+is measured separately: 18/19 (see [Harder eval cases](#harder-eval-cases)).
 
 ## What was built
 
@@ -130,8 +131,10 @@ At commit `3dbdeef`, 5 runs per case: **60/60**.
 | search | `find_definition`, `list_test_files` | finds code with `grep`/`glob`, not `bash` |
 | delegate | `delegate_when_asked`, `delegate_big_project`, `big_project_question` | uses `task` when asked; on a project 3.5× the context window, keeps the main history under 10k tokens |
 | honesty | `actually_runs_command`, `respects_denial`, `no_invented_contents` | runs what it is asked to run; respects a denial; doesn't invent a missing file's contents |
-| edit | `fix_failing_test`, `precise_edit`, `create_and_run` | fixes a bug without touching the tests; a precise edit; writes and runs a correct file |
+| edit | `fix_failing_test`, `precise_edit`, `create_and_run`, `rename_across_files`* | fixes a bug without touching the tests; a precise edit; writes and runs a correct file; renames a function across files and nothing else |
 | sandbox | `venv_install` | installs into a project venv |
+
+\* Added after the baseline, so not in it; its own numbers are under [Harder eval cases](#harder-eval-cases).
 
 Results are saved in `evals/results/` (gitignored, so they exist only on this machine). The baseline
 file is `evals/results/baseline-3dbdeef.json`. Compare with:
@@ -145,10 +148,23 @@ file is `evals/results/baseline-3dbdeef.json`. Compare with:
 ### Harder eval cases
 
 At 100%, the eval can catch regressions but can't show whether a change is an improvement. It needs
-cases the model currently fails some of the time. Candidates:
+cases the model currently fails some of the time.
 
-- **Multi-step edits across files**: e.g. rename a function used in five places, checked by running
-  the tests.
+**Done: `rename_across_files`.** Rename `calc_total` to `order_total` in a small package, tests and
+README included. It passes only if the tests pass *and* every file equals the original with exactly
+`\bcalc_total\b` replaced (the new `files_equal` check names the first differing line). Traps: a
+lookalike, `calc_total_weight`, that a blind substring replace also renames (and the tests still
+pass, so only the exact check sees it); references by string (`__all__`, a `getattr` table) that
+following imports misses; a README mention.
+
+Live, over two batches: **18/19 finished runs passed**. The one real failure renamed the lookalike
+too. A 20th run was cut off by the runner being killed, and one more "failed" only because Ollama
+stalled for 300 s after the work was done (both checks pass on its files). The usual approach is
+careful: `grep`, read every file, one `edit_file` per file, run the tests, `grep` again (~20 tool
+calls, ~60 s). So the case is harder than the baseline but still near the ceiling.
+
+Remaining candidates:
+
 - **Long sessions that trigger compaction**: plant facts early, push the history past the budget,
   then check what the model still remembers and whether it still acts correctly.
 - **Write-capable subagent**: check that the harness's change list matches what is on disk, and that
@@ -182,3 +198,5 @@ cases the model currently fails some of the time. Candidates:
   says so).
 - **Eval samples are small** (5–10 runs per case). Early on, 3 runs of FizzBuzz looked like 2/3 and
   turned out to be 45% over 20; judge changes with `-n 10` or more on the cases they target.
+- **The eval runner counts an Ollama stall as a failed run**, even when the work on disk passes every
+  check. Read the failure line before trusting a lower pass rate.
