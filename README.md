@@ -4,7 +4,7 @@ A coding agent harness built from scratch. No SDKs, no dependencies — stdlib o
 so the wire format between you and the model stays visible.
 
 Streaming, context compaction, `grep`/`glob`, saved sessions, subagents (read-only or
-write-capable) and a bubblewrap sandbox for `bash`. 128 offline tests; eval baseline 60/60
+write-capable) and a bubblewrap sandbox for `bash`. 128 offline tests; eval baseline 146/150
 against the live model. What was planned, what's done and what's pending:
 [`docs/project.md`](docs/project.md).
 
@@ -182,9 +182,9 @@ prompt to the live model, and checks on the outcome, preferring the world (files
 that must pass) over the answer text:
 
 ```bash
-.venv/bin/python -m evals                          # all 15 cases, 3 runs each (~20 min)
+.venv/bin/python -m evals                          # all 15 cases, 3 runs each (~17 min on one server)
 .venv/bin/python -m evals -k honesty -n 5          # by name or group
-.venv/bin/python -m evals --baseline evals/results/baseline-3dbdeef.json
+.venv/bin/python -m evals --baseline evals/results/baseline-a1c9b01.json
 .venv/bin/python -m evals --hosts 100.66.104.56,100.76.19.74   # split runs across servers
 ```
 
@@ -206,7 +206,8 @@ temperature 0.6 one run proves little: judge a prompt change by pass rates over 
 runs, against a baseline taken just before it. Add a case whenever the model does something
 worth never seeing again (`evals/cases.py`).
 
-**Baseline** at `3dbdeef`, 5 runs per case: **60/60**. At 100% the set catches regressions but
-can't show improvements; it needs harder cases the model sometimes fails. Candidates are listed
-in [`docs/project.md`](docs/project.md#pending).
+**Baseline** at `a1c9b01`, 10 runs per case over two servers: **146/150**. The 12 original
+cases are at 119/120 and catch regressions; the three harder ones (a cross-file rename, and two
+about what survives compaction) are below 100% on purpose, so they can show improvements. Per-case
+numbers and what's pending: [`docs/project.md`](docs/project.md#eval-baseline).
 

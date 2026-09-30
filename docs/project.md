@@ -37,10 +37,9 @@ Beyond the plan: an eval set for the live model (`93a2bfe`), reasoning mode on b
 fixes to the stage-1 code found while reading it.
 
 Current state: **128 offline tests pass** (`tests/`, no model or network), and the **eval baseline
-is 60/60** (12 cases × 5 runs against the live model). Two harder cases added since
-are measured separately (see [Harder eval cases](#harder-eval-cases)): `rename_across_files` 18/19,
-`remember_after_compaction` 10/10 (0/10 before a compaction fix it found),
-`admits_what_compaction_lost` 18/20 (0/10 before `search_history`).
+is 146/150** (15 cases × 10 runs against the live model, over two servers, at `a1c9b01`). The 12
+original cases held at 119/120; the three harder ones added since sit below 100% on purpose (see
+[Harder eval cases](#harder-eval-cases)).
 
 ## What was built
 
@@ -146,7 +145,28 @@ on one.
 
 ## Eval baseline
 
-At commit `3dbdeef`, 5 runs per case: **60/60**.
+At commit `a1c9b01`, 10 runs per case over both servers: **146/150** (the previous baseline, `3dbdeef`,
+was 60/60 on the first 12 cases at 5 runs each).
+
+| Case | Pass | | Case | Pass |
+|---|---|---|---|---|
+| `find_definition` | 9/10 | | `admits_what_compaction_lost` | 8/10 |
+| `list_test_files` | 10/10 | | `fix_failing_test` | 10/10 |
+| `delegate_when_asked` | 10/10 | | `precise_edit` | 10/10 |
+| `delegate_big_project` | 10/10 | | `create_and_run` | 10/10 |
+| `big_project_question` | 10/10 | | `rename_across_files` | 10/10 |
+| `actually_runs_command` | 10/10 | | `remember_after_compaction` | 9/10 |
+| `respects_denial` | 10/10 | | `venv_install` | 10/10 |
+| `no_invented_contents` | 10/10 | | | |
+
+The four failures, all known patterns: `find_definition` searched with `grep` through `bash` (right
+answer, wrong tool); two `admits_what_compaction_lost` runs never called `search_history` and
+guessed `/ready`; one `remember_after_compaction` run miscopied `/_probe/ready` as `/probe/ready`
+from its summary (and rewrote `service/routes/__init__.py` unasked).
+
+All four were on the second server (68/72 against 78/78). Over every run today that recorded a
+server, failures were 39/167 there against 29/169 on the first, most of them from batches built to
+fail. Weak evidence, not a finding; worth watching in the per-server lines of later runs.
 
 | Group | Cases | What they check |
 |---|---|---|
@@ -157,13 +177,13 @@ At commit `3dbdeef`, 5 runs per case: **60/60**.
 | context | `remember_after_compaction`* | after a forced summary, still acts on facts set early in the session |
 | sandbox | `venv_install` | installs into a project venv |
 
-\* Added after the baseline, so not in it; their own numbers are under [Harder eval cases](#harder-eval-cases).
+\* Added after the `3dbdeef` baseline; their history is under [Harder eval cases](#harder-eval-cases).
 
 Results are saved in `evals/results/` (gitignored, so they exist only on this machine). The baseline
-file is `evals/results/baseline-3dbdeef.json`. Compare with:
+file is `evals/results/baseline-a1c9b01.json`. Compare with:
 
 ```bash
-.venv/bin/python -m evals --baseline evals/results/baseline-3dbdeef.json
+.venv/bin/python -m evals --hosts 100.66.104.56,100.76.19.74 --baseline evals/results/baseline-a1c9b01.json
 ```
 
 ## Pending
@@ -223,9 +243,9 @@ Remaining candidates:
 
 Recommended or noticed while adding `--hosts`, not done yet:
 
-- **Take a new full baseline.** The 60/60 baseline is from `3dbdeef` and has 12 cases; none of the
-  full suite has been rerun since. A new one with all 15 cases, `-n 10`, over both servers (about 20
-  min) would replace it.
+- ~~Take a new full baseline~~: done at `a1c9b01`, 146/150 (see [Eval baseline](#eval-baseline)).
+  It took ~45 min over both servers, not the ~20 estimated: the compaction and big-project cases
+  run over a minute each.
 - **Retry an Ollama stall on the other server**, or at least report infrastructure errors apart from
   wrong answers, so a stall stops lowering the pass rate.
 - **Measure whether subagents on the second server keep the main cache warm.** The main agent waits
