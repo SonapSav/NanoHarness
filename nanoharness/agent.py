@@ -36,8 +36,9 @@ class Agent:
         self.on_token = on_token
         self.dropped_input = False   # did the last failed turn discard the user's message?
         # For review.py, per turn: files as they were before this turn first wrote them (None =
-        # didn't exist), the last bash command with its output, and whether anything wrote.
-        self.before, self.last_command, self.wrote = {}, "", False
+        # didn't exist), the last bash command with its output, every call as a line, every
+        # bash command, and a snapshot of the working directory at the start.
+        self.before, self.last_command, self.steps, self.commands, self.start = {}, "", [], [], None
         self.verdict = None          # (faked, reason) from the last turn's review, if one ran
 
     def available(self):
@@ -71,9 +72,9 @@ class Agent:
             if name in ("write_file", "edit_file"):
                 self.remember_before(args.get("path", ""))
             result = tool.fn(**args)
-            self.wrote = self.wrote or tool.writes
             if name == "bash":
                 self.last_command = f"$ {args.get('command', '')}\n{result}"
+                self.commands.append(str(args.get("command", "")))
             return result
         except Denied as e:
             return f"Error: {e}"
@@ -96,13 +97,20 @@ class Agent:
     def review_turn(self, request: str, answer: str):
         """Ask review.py whether this turn's changes fake a pass; warn the user if so.
         The model is not told: arguing with it made it spiral."""
+        changed = review.changed(self.start)
+        if not review.worth_reviewing(changed, self.commands):
+            return
         after = {}
         for key in self.before:
             p = config.WORKDIR / key
             after[key] = p.read_text(errors="replace") if p.is_file() else ""
+        changes = review.diff(self.before, after)
+        by_commands = sorted(changed - self.before.keys() - {"?"})
+        if by_commands:   # through bash: the old contents weren't kept, so no diff
+            changes += "\n\nAlso changed by commands (contents not shown): " + ", ".join(by_commands)
         try:
-            self.verdict = review.review(request, review.diff(self.before, after),
-                                         self.last_command, answer)
+            self.verdict = review.review(request, changes.strip(), self.last_command, answer,
+                                         self.steps)
         except Exception as e:  # a failed review must not cost the user the turn
             print(f"\033[90m  (review failed: {e})\033[0m")
             return
@@ -128,11 +136,13 @@ class Agent:
         self.messages.append(user_message)
         self.dropped_input = False
         self.stopped = False
-        self.before, self.last_command, self.wrote, self.verdict = {}, "", False, None
+        self.before, self.last_command, self.steps, self.commands = {}, "", [], []
+        self.verdict = None
+        self.start = review.snapshot() if config.REVIEW and not self.depth else None
         self.save()
         try:
             answer = self._loop()
-            if config.REVIEW and self.wrote and not self.depth:
+            if config.REVIEW and not self.depth:
                 self.review_turn(user_input, answer)
             return answer
         except BaseException:  # ModelError, KeyboardInterrupt
@@ -186,6 +196,7 @@ class Agent:
                             "It did NOT run."
                         ))
                     raise
+                self.steps.append(review.step(name, call.get("function", {}).get("arguments"), result))
                 if config.REPEAT_NOTE:
                     key = (name, json.dumps(call.get("function", {}).get("arguments"), sort_keys=True))
                     repeated = seen.get(key) == result

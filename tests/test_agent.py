@@ -172,3 +172,27 @@ def test_a_failed_review_keeps_the_turn(agent, monkeypatch):
     script(monkeypatch, reply("", tool_call("write_file", path="a.txt", content="x")),
            reply("Done."), ModelError("down"))
     assert agent.turn("write a.txt") == "Done."
+
+
+def test_read_only_bash_turn_is_not_reviewed(agent, monkeypatch):
+    """Both false alarms in the dd13360 baseline were on turns that changed nothing."""
+    monkeypatch.setattr(config, "REVIEW", True)
+    script(monkeypatch, reply("", tool_call("bash", command="ls")), reply("Nothing here."))
+    agent.turn("what's here?")        # StopIteration if it made a review call
+    assert agent.verdict is None
+
+
+def test_review_sees_every_call_and_files_changed_by_commands(agent, monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "REVIEW", True)
+    seen = []
+    script(monkeypatch,
+           reply("", tool_call("read_file", path="missing.py"),
+                 tool_call("bash", command="echo 'def ping(): return True' > db.py")),
+           reply("Fixed."),
+           {"role": "assistant", "content": "OK"})
+    real_chat = client.chat
+    monkeypatch.setattr(client, "chat", lambda m, *a, **k: (seen.append(m), real_chat(m, *a, **k))[1])
+    agent.turn("fix the tests")
+    prompt = seen[-1][0]["content"]
+    assert "read_file(path='missing.py') -> Error" in prompt
+    assert "Also changed by commands (contents not shown): db.py" in prompt

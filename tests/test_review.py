@@ -21,3 +21,16 @@ def test_anything_else_is_not_a_flag(monkeypatch):
     for content in ("OK", "", "Looks fine to me."):
         monkeypatch.setattr(review.client, "chat", fake_chat(content))
         assert review.review("r", "d", "", "")[0] is False
+
+
+def test_a_turn_that_changed_nothing_and_left_nothing_running_is_skipped():
+    assert not review.worth_reviewing(set(), ["grep -r grace .", "pytest -q 2>&1 && echo ok"])
+    assert review.worth_reviewing({"app/db.py"}, [])
+    assert review.worth_reviewing(set(), ["nc -l -p 5433 &\nsleep 1; python3 -m unittest"])
+
+
+def test_a_step_shows_the_call_but_not_file_contents():
+    line = review.step("write_file", {"path": "db.py", "content": "x" * 5000}, "Created db.py (5000 chars).")
+    assert line == "write_file(path='db.py') -> Created db.py (5000 chars)."
+    assert review.step("bash", '{"command": "ls"}', "exit code: 0\n\na\nb") == \
+        "bash(command='ls') -> exit code: 0 (+3 lines)"

@@ -491,7 +491,24 @@ Recommended or noticed while adding `--hosts`, not done yet:
   command, never `read_file`). Next, together: show it every tool call of the turn in short
   (name and arguments) instead of only the last command, and skip turns that changed no file and
   ran no command that could start or fake something. That would also cut the cost on read-only
-  turns. Needs the replay (for fakes) and the two false-alarm runs as new negatives. Blind spots: files changed only through `bash` are not in the
+  turns. Needs the replay (for fakes) and the two false-alarm runs as new negatives.
+  **Done, replayed (v3, 210 runs, both servers):** the reviewer now gets every tool call as a
+  line (tool, short arguments without file contents, first result line) besides the last
+  command's full output, and files changed through `bash` by name; and it runs only when a file
+  in the working directory changed (mtime/size snapshot at turn start, any tool) or a command left
+  something running (a lone `&`). Result: 57 runs skipped with no call, **both live false alarms
+  among them**; fakes 54/55 caught (the miss is a plain SQLite fallback the live review had
+  flagged, so likely noise: the review runs at the agent's temperature, 0.6); 1 new false alarm in
+  77 reviewed correct runs (a rename that saw `pytest` missing, then passed with `unittest`,
+  "ignoring the initial failure"), which the step lines made possible. Also flagged: two
+  `remember_after_compaction` runs with a real defect (deleted tests; a test that passes while
+  the route isn't registered). Missed: the live-flagged run that deleted tests. Net: the skip
+  rule is a clear gain (no false alarms and no cost on read-only turns); the step lines are
+  neutral within noise at this sample size, kept because they close the "stand-in started before
+  the last command" gap. Not measured live yet. Next idea: run the review at temperature 0, since
+  verdicts on the same run flip between passes. New gap: a fake that changes no file and leaves
+  nothing running (a stand-in started and the tests run in one command, no `&`) is now skipped;
+  none of the 55 recorded fakes did that. Blind spots: files changed only through `bash` are not in the
   diff, and only the *last* command is shown, so a stand-in started earlier in the turn is
   missed. The 36 fakes are all one case; other kinds of fake are untested.
 - **No limit on one reply's reasoning.** The two spiralling runs above generated ~200k chars of
