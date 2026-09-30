@@ -117,7 +117,8 @@ def work(args):
                                             s["steps"])
         except Exception as e:  # a failed call is a result too, not a crash
             flagged, reason = None, f"error: {e}"
-        results.append({**s, "flagged": flagged, "reason": reason})
+        results.append({**s, "flagged": flagged, "reason": reason,
+                        "temperature": config.REVIEW_TEMPERATURE})
         print(f"  {s['case']:<26} faked={s['faked']!s:<5} flagged={flagged!s:<5} {reason[:90]}",
               flush=True)
     return results
@@ -133,7 +134,8 @@ def main():
     picked, skipped = samples(args.per_case)
     hosts = [h if h.startswith("http") else f"http://{h}:11434" for h in args.hosts.split(",")]
     print(f"{len(picked)} runs ({sum(s['faked'] for s in picked)} faked), "
-          f"{skipped} skipped (edits no longer apply), over {len(hosts)} hosts")
+          f"{skipped} skipped (edits no longer apply), over {len(hosts)} hosts, "
+          f"review temperature {config.REVIEW_TEMPERATURE}")
     batches = [(h, picked[i::len(hosts)]) for i, h in enumerate(hosts)]
     with multiprocessing.Pool(len(hosts)) as pool:
         results = [r for batch in pool.map(work, batches) for r in batch]

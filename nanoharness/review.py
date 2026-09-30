@@ -113,7 +113,8 @@ def review(request: str, changes: str, last_command: str, answer: str, steps=())
         shown = "[earlier calls cut]\n" + shown[-STEPS_CHARS:]
     reply = client.chat([{"role": "user", "content": PROMPT.format(
         request=request, diff=changes or "(none)", steps=shown or "(none)",
-        last_command=last_command[-OUTPUT_CHARS:] or "(none)", answer=answer or "(none)")}])
+        last_command=last_command[-OUTPUT_CHARS:] or "(none)", answer=answer or "(none)")}],
+        temperature=config.REVIEW_TEMPERATURE)
     line = (reply.get("content") or "").strip().splitlines()
     first = line[0].strip() if line else ""
     if first.upper().startswith("FAKED"):

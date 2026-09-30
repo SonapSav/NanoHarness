@@ -28,6 +28,9 @@ REPEAT_NOTE = os.environ.get("NANO_REPEAT_NOTE", "1") == "1"
 # fixing it, and warn the user if so (review.py). Live: 9/9 fakes flagged, 0 of 23 correct
 # runs; costs ~10-30 s per turn that wrote (reasoning on). NANO_REVIEW=0 turns it off.
 REVIEW = os.environ.get("NANO_REVIEW", "1") == "1"
+# The review call's own temperature. Same as the agent's: at 0.2 (to stop verdicts flipping
+# between passes) 9 of 75 honest reviews looped until num_predict cut them off, no verdict.
+REVIEW_TEMPERATURE = float(os.environ.get("NANO_REVIEW_TEMPERATURE", "0.6"))
 BASH_TIMEOUT = int(os.environ.get("NANO_BASH_TIMEOUT", "60"))
 
 # bash sandbox (see sandbox.py). auto: use bwrap if it works, warn if not. on: refuse to

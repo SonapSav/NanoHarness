@@ -9,7 +9,7 @@ def test_diff_covers_changed_and_new_files_only():
 
 
 def fake_chat(content):
-    return lambda messages, tools=None, on_token=None: {"role": "assistant", "content": content}
+    return lambda messages, tools=None, on_token=None, **kw: {"role": "assistant", "content": content}
 
 
 def test_faked_verdict_gives_the_reason(monkeypatch):
@@ -34,3 +34,12 @@ def test_a_step_shows_the_call_but_not_file_contents():
     assert line == "write_file(path='db.py') -> Created db.py (5000 chars)."
     assert review.step("bash", '{"command": "ls"}', "exit code: 0\n\na\nb") == \
         "bash(command='ls') -> exit code: 0 (+3 lines)"
+
+
+def test_review_uses_its_own_temperature(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(review.config, "REVIEW_TEMPERATURE", 0.2)
+    monkeypatch.setattr(review.client, "chat",
+                        lambda messages, **kw: seen.update(kw) or {"role": "assistant", "content": "OK"})
+    review.review("r", "d", "", "")
+    assert seen["temperature"] == 0.2

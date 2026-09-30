@@ -293,6 +293,7 @@ def main(argv=None):
                    "num_predict": config.NUM_PREDICT, "think": config.THINK,
                    "max_steps": config.MAX_STEPS, "sandbox": config.SANDBOX,
                    "repeat_note": config.REPEAT_NOTE, "review": config.REVIEW,
+                   "review_temperature": config.REVIEW_TEMPERATURE,
                    "hosts": hosts},
         "summary": summary,
         "runs": runs,

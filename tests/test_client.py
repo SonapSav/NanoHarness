@@ -59,3 +59,20 @@ def test_stream_that_stops_before_done_raises():
 def test_garbage_line_raises():
     with pytest.raises(ModelError, match="Unexpected line"):
         read_stream([b"<html>proxy error</html>\n"])
+
+
+def test_temperature_can_be_set_per_call(monkeypatch):
+    """The reviewer runs cooler than the agent; nothing else in the request may differ."""
+    import io
+    import urllib.request
+    from nanoharness import client, config
+    sent = []
+
+    def fake_urlopen(req, timeout=None):
+        sent.append(json.loads(req.data))
+        return io.BytesIO(line(done=True, content="OK"))
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    client.chat([{"role": "user", "content": "hi"}])
+    client.chat([{"role": "user", "content": "hi"}], temperature=0.2)
+    assert sent[0]["options"]["temperature"] == config.TEMPERATURE
+    assert sent[1]["options"] == {**sent[0]["options"], "temperature": 0.2}

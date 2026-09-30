@@ -62,6 +62,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `NANO_STREAM` | `1` | `0` prints each reply only once it is complete |
 | `NANO_NUM_PREDICT` | `16384` | tokens one reply may generate, reasoning included; hitting it is an error (`-1` = no cap) |
 | `NANO_REVIEW` | `1` | after a turn that wrote, a separate call checks whether the change makes a check pass without fixing it, and warns you |
+| `NANO_REVIEW_TEMPERATURE` | `0.6` | the review call's own temperature (the agent keeps `NANO_TEMPERATURE`); lower made it loop until cut off |
 | `NANO_COMPACT_AT` | `0.75` | fraction of `NANO_NUM_CTX` at which history gets shrunk; the rest is room for the reply |
 | `NANO_MAX_STEPS` | `25` | tool rounds per user turn before giving up |
 | `NANO_SUBAGENT_MAX_STEPS` | `15` | tool rounds a `task` subagent gets before it must report |

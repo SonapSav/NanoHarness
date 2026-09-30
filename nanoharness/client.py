@@ -11,7 +11,7 @@ class ModelError(RuntimeError):
     pass
 
 
-def chat(messages, tools=None, on_token=None):
+def chat(messages, tools=None, on_token=None, temperature=None):
     """Send the whole history plus tool schemas; return the assistant message dict.
 
     The returned dict looks like:
@@ -20,7 +20,8 @@ def chat(messages, tools=None, on_token=None):
     Note Ollama does not assign tool-call ids the way the OpenAI API does.
 
     The reply is streamed; on_token(kind, text), if given, sees each fragment as it
-    arrives, with kind "content" or "thinking".
+    arrives, with kind "content" or "thinking". `temperature` overrides the agent's for this
+    call only (the reviewer's); it doesn't make Ollama reload the model, num_ctx would.
     """
     payload = {
         "model": config.MODEL,
@@ -29,7 +30,7 @@ def chat(messages, tools=None, on_token=None):
         "think": config.THINK,
         "options": {
             "num_ctx": config.NUM_CTX,
-            "temperature": config.TEMPERATURE,
+            "temperature": config.TEMPERATURE if temperature is None else temperature,
             "num_predict": config.NUM_PREDICT,
         },
     }
