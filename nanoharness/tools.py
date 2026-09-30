@@ -431,8 +431,10 @@ SNIPPET_BEFORE, SNIPPET_AFTER = 150, 250   # a pasted paragraph can be one 3000-
     description="Search the earlier part of this conversation, which was replaced by a summary "
                 "to save context. The summary leaves details out; the full text is kept and "
                 "searchable here. Use it whenever the user refers to something from earlier (a "
-                "path, value, name or decision) that the summary does not state exactly. Returns "
-                "a snippet around each match, numbered by message.",
+                "path, value, name or decision) that the summary does not state exactly. Search "
+                "for the words the user used, not your own paraphrase: for 'the deploy key from "
+                "the ops email', search 'deploy key'. Single keywords work best. Returns a snippet "
+                "around each match, numbered by message.",
     parameters={
         "type": "object",
         "properties": {
@@ -476,6 +478,10 @@ def search_history(pattern):
     if more:
         picked = sorted(picked)[:MAX_HISTORY_HITS]
 
+    # Seen live: a search matched only the model's own "noted the probe requirement" reply, and it
+    # guessed the path. Say when nothing the user said (or a tool returned) matched.
+    only_own = all(archive[i - 1]["role"] == "assistant" for i, *_ in found)
+
     hits = []
     for _, i, s, e in sorted(picked, key=lambda x: (x[1], x[2])):
         text, m = texts[i], archive[i - 1]
@@ -493,6 +499,9 @@ def search_history(pattern):
     out = "\n\n".join(hits)
     if more:
         out += f"\n\n[stopped at {MAX_HISTORY_HITS} matches; narrow the pattern]"
+    if only_own:
+        out += ("\n\n[Only your own earlier replies matched, nothing the user said. What they said "
+                "is probably worded differently: search again with words from their request.]")
     return truncate(out) + ("\n\n[If none of this states the exact detail you need, search again "
                             f"with other words. {NOT_FOUND_ADVICE}]")
 

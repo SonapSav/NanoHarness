@@ -262,3 +262,10 @@ def test_rare_matches_are_shown_before_common_ones():
     out = search([{"role": "user", "content": thread}], "ops|load balancer")
     assert "/_probe/ready" in out
     assert out.count("[message 1,") == 3 and "more matches in message 1" in out
+
+
+def test_search_history_says_when_only_its_own_replies_matched():
+    own = {"role": "assistant", "content": "I've noted the readiness probe requirement."}
+    user = {"role": "user", "content": "the load balancer probes GET /_probe/ready"}
+    assert "Only your own earlier replies matched" in search([own, user], "readiness")
+    assert "Only your own" not in search([own, user], "probe")    # the user's message matched too

@@ -38,7 +38,8 @@ SUMMARY_MARK = "[Summary of the earlier conversation, written to save context"  
 # admits_what_compaction_lost). So the details stay findable, and the header says where.
 SUMMARY_HEADER = (SUMMARY_MARK + ". It leaves details out; the full earlier conversation is "
                   "kept, and search_history searches it. Before relying on a detail from earlier "
-                  "that is not stated exactly below (a path, value, name), look it up.]\n\n")
+                  "that is not stated exactly below (a path, value, name), look it up, searching "
+                  "for the words the user used for it.]\n\n")
 ELIDED = "more chars elided to save context"
 
 
