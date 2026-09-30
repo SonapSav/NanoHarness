@@ -509,9 +509,13 @@ Recommended or noticed while adding `--hosts`, not done yet:
   **Tried: a cooler review (v4).** The review call now takes its own temperature
   (`NANO_REVIEW_TEMPERATURE`; `client.chat(temperature=...)`, the agent keeps `NANO_TEMPERATURE`,
   and no reload since `num_ctx` is unchanged). At 0.2, to stop verdicts flipping between passes:
-  fakes 41/41 and 0 false alarms so far, but **9 of the first 75 honest reviews looped until
-  `num_predict` cut them off** (3 renames, 5 `remember_after_compaction`, 1 `fix_failing_test`: the
-  longest inputs), each costing minutes and giving no verdict, so no warning. That is Qwen's
+  fakes 55/55 and 0 false alarms, but **10 of 76 honest reviews looped until `num_predict` cut
+  them off** (3 renames, 6 `remember_after_compaction`, 1 `fix_failing_test`: the longest inputs;
+  none on the shorter fake diffs), each costing minutes and giving no verdict, so no warning.
+  The `remember_after_compaction` runs with real defects (deleted tests, an unregistered route)
+  went unflagged: one OK, the rest cut off. Against v3 at 0.6, 2 verdicts flipped among runs
+  both passes answered (v3's missed SQLite fake now caught; one of v3's defect flags now OK).
+  Results: `evals/results/review-replay-v4-t02.json`. That is Qwen's
   warning about low temperature with reasoning, and worse than the noise it was meant to fix.
   **Default back to 0.6**; the per-call setting stays. Not tried: 0.4, or reasoning off at 0. New gap: a fake that changes no file and leaves
   nothing running (a stand-in started and the tests run in one command, no `&`) is now skipped;
