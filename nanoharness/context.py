@@ -8,7 +8,8 @@ cheapest step first:
     2. replace earlier turns with a model-written summary
     3. elide tool outputs in the current turn, except the latest few
 
-The system prompt and the current user message are never touched.
+The system prompt and the current user message are never touched. What step 2 replaces is
+not thrown away: it goes to the agent's archive, which the search_history tool searches.
 """
 import json
 
@@ -32,7 +33,12 @@ in a smaller context. Write a concise summary (under 300 words) of the transcrip
 - decisions made, and anything still unfinished or failing
 Use plain text. Keep file names, paths and exact error messages. Do not invent anything."""
 
-SUMMARY_HEADER = "[Summary of the earlier conversation, written to save context]\n\n"
+SUMMARY_MARK = "[Summary of the earlier conversation, written to save context"   # also in old sessions
+# Telling the model not to guess, here or in the system prompt, did not stop it (0/30 on
+# admits_what_compaction_lost). So the details stay findable, and the header says where.
+SUMMARY_HEADER = (SUMMARY_MARK + ". It leaves details out; the full earlier conversation is "
+                  "kept, and search_history searches it. Before relying on a detail from earlier "
+                  "that is not stated exactly below (a path, value, name), look it up.]\n\n")
 ELIDED = "more chars elided to save context"
 
 
@@ -44,9 +50,10 @@ def estimate_tokens(messages, tools=None) -> int:
     return (len(json.dumps(messages)) + len(json.dumps(tools or []))) // CHARS_PER_TOKEN
 
 
-def fit(messages, tools=None):
+def fit(messages, tools=None, archive=None):
     """Return (messages, note). The list is new if anything was shrunk; note says what
-    happened and is None when the history already fit."""
+    happened and is None when the history already fit. Messages replaced by a summary
+    are appended to `archive`, as they were before this call shortened anything."""
     before = estimate_tokens(messages, tools)
     if before <= budget():
         return messages, None
@@ -54,6 +61,7 @@ def fit(messages, tools=None):
     cur = current_turn_start(messages)
     steps = []
 
+    original = messages
     messages = elide(messages, range(1, cur))
     if estimate_tokens(messages, tools) <= budget():
         return messages, note(before, messages, tools, "shortened old tool outputs")
@@ -68,6 +76,8 @@ def fit(messages, tools=None):
             steps.append(f"summary failed: {e}")
         else:
             if len(json.dumps(summary)) < len(json.dumps(old)):
+                if archive is not None:   # an earlier summary is a copy, not an original
+                    archive.extend(m for m in original[1:cur] if not is_summary(m))
                 messages = [messages[0], summary] + messages[cur:]
                 cur = 2
                 steps.append("summarized earlier turns")
@@ -93,7 +103,7 @@ def current_turn_start(messages) -> int:
 
 
 def is_summary(m) -> bool:
-    return m["role"] == "user" and m.get("content", "").startswith(SUMMARY_HEADER)
+    return m["role"] == "user" and m.get("content", "").startswith(SUMMARY_MARK)
 
 
 def elide(messages, indices):

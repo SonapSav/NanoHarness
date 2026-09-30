@@ -167,3 +167,12 @@ def summary_lacks(text):
         found = [m for m in r.messages if context.is_summary(m) and text in m.get("content", "")]
         return not found, "in the summary" if found else "absent"
     return Check(f"summary lacks {text!r}", fn)
+
+
+def any_of(*checks):
+    """Passes if any of `checks` does: for a case with more than one right outcome."""
+    def fn(r):
+        results = [c(r) for c in checks]
+        ok = [x["check"] for x in results if x["ok"]]
+        return bool(ok), f"passed: {ok}" if ok else "; ".join(f"{x['check']}: {x['detail']}" for x in results)
+    return Check(" or ".join(c.name for c in checks), fn)

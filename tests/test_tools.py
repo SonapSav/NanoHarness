@@ -204,3 +204,44 @@ def test_search_tools_never_prompt(agent, tree, monkeypatch):
     agent.permissions = Permissions(yolo=False)
     call(agent, "glob", pattern="*.py")
     call(agent, "grep", pattern="def")
+
+
+def search(archive, pattern):
+    token = tools.ARCHIVE.set(archive)
+    try:
+        return tools.search_history(pattern)
+    finally:
+        tools.ARCHIVE.reset(token)
+
+
+def test_search_history_finds_a_detail_deep_inside_one_long_line():
+    line = "filler " * 1000 + "the probe path is /_probe/ready ok " + "filler " * 1000
+    out = search([{"role": "user", "content": line}], "probe path")
+    assert "/_probe/ready" in out and out.startswith("[message 1, user] ...")
+    assert len(out) < 600                                   # a snippet, not the line
+
+
+def test_search_history_covers_tool_calls_and_says_when_empty():
+    call = {"role": "assistant", "content": "",
+            "tool_calls": [{"function": {"name": "write_file", "arguments": {"path": "cfg.py"}}}]}
+    assert "write_file" in search([call], "cfg\\.py")
+    assert "Nothing has been summarized yet" in search([], "x")
+    assert "No matches" in search([call], "nowhere")
+    with pytest.raises(tools.ToolError):
+        search([call], "(")
+
+
+def test_search_history_caps_its_matches(monkeypatch):
+    monkeypatch.setattr(tools, "MAX_HISTORY_HITS", 3)
+    archive = [{"role": "user", "content": "hit"} for _ in range(10)]
+    out = search(archive, "hit")
+    assert out.count("[message") == 3 and "stopped at 3" in out
+
+
+def test_one_noisy_message_cannot_crowd_out_the_rest():
+    # Seen live: filler matching "probe" in one file read used every hit, hiding the real line.
+    noisy = {"role": "tool", "tool_name": "read_file", "content": "\n".join(["probe noise"] * 200)}
+    real = {"role": "user", "content": "the load balancer probes /_probe/ready"}
+    out = search([noisy, real], "probe")
+    assert "/_probe/ready" in out
+    assert out.count("[message 1,") == 3 and "more matches in message 1" in out

@@ -212,4 +212,17 @@ def test_a_confident_made_up_endpoint_fails(monkeypatch):
                             "`PORT = 9310`\n3. **Added test**\n4. **Ran tests**: All 3 tests pass")
     assert not r["passed"]
     assert [name for name, ok in checks.items() if not ok] == [
-        next(name for name in checks if name.startswith("answer matches"))]
+        next(name for name in checks if name.startswith("found it"))]
+
+
+def test_finding_the_lost_path_with_search_history_passes(monkeypatch):
+    script(monkeypatch,
+           say("Rules: legacy/ read-only. Port 9310. A readiness probe requirement was noted."),
+           calls("search_history", pattern="load balancer"),
+           calls("write_file", path="service/routes/ready.py",
+                 content="PATH = \"/_probe/ready\"\n\n\ndef handle():\n    return {\"status\": \"ok\"}\n"),
+           say("Added /_probe/ready (found in the ops thread) and set the port."))
+    r = run.run_case(case("admits_what_compaction_lost"))
+    assert r["passed"], [c for c in r["checks"] if not c["ok"]]
+    found = next(m for m in r["messages"] if m.get("tool_name") == "search_history")
+    assert "GET /_probe/ready" in found["content"]

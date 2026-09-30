@@ -22,15 +22,16 @@ def now() -> str:
 
 
 class Session:
-    def __init__(self, id: str = None, created: str = None):
+    def __init__(self, id: str = None, created: str = None, archive=None):
         self.id = id or new_id()
         self.created = created or now()
+        self.archive = archive or []   # what compaction summarized, as loaded
 
     @property
     def path(self) -> Path:
         return config.SESSION_DIR / f"{self.id}.json"
 
-    def save(self, messages):
+    def save(self, messages, archive=None):
         # No file until there is something to resume: launching and quitting leaves no trace.
         if not self.path.exists() and not any(m["role"] == "user" for m in messages):
             return
@@ -42,6 +43,8 @@ class Session:
             "updated": now(),
             "messages": messages,
         }
+        if archive:
+            data["archive"] = archive
         config.SESSION_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
         tmp = self.path.with_suffix(".tmp")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -80,7 +83,7 @@ def load(id: str):
             f"session {id} was started in {data.get('workdir')}, not {config.WORKDIR}; "
             "cd there to resume it"
         )
-    return Session(data["id"], data.get("created")), data["messages"]
+    return Session(data["id"], data.get("created"), data.get("archive")), data["messages"]
 
 
 def list_sessions():

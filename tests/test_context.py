@@ -157,3 +157,36 @@ def test_the_summarizer_sees_the_start_and_end_of_a_long_message():
     assert "NOTE-AT-START" in text and "NOTE-AT-END" in text
     assert "chars cut" in text and len(text) < 1600
     assert context.render(user("short")) == "USER: short"     # short messages untouched
+
+
+def test_summaries_from_before_the_header_changed_are_still_recognized():
+    old = "[Summary of the earlier conversation, written to save context]\n\nstuff"
+    assert context.is_summary(user(old))
+    assert context.is_summary(user(context.SUMMARY_HEADER + "stuff"))
+
+
+
+def test_what_the_summary_replaces_is_archived_in_full(monkeypatch):
+    summarizer(monkeypatch)
+    long = "start " + "q" * 6000 + " THE-DETAIL"
+    msgs = [sys_(), user(context.SUMMARY_HEADER + "old summary"), user(long),
+            calls("bash"), result(BIG), user("current")]
+    archive = []
+    out, note = context.fit(msgs, archive=archive)
+    assert "summarized" in note
+    assert archive == [msgs[2], msgs[3], msgs[4]]      # originals, unshortened; no summary
+    assert "THE-DETAIL" in archive[0]["content"]
+
+
+def test_search_history_is_offered_only_once_something_was_archived(monkeypatch):
+    summarizer(monkeypatch)
+    agent = Agent(Permissions(yolo=True))
+    assert "search_history" not in agent.available()
+    refused = agent.run_tool({"function": {"name": "search_history", "arguments": {"pattern": "x"}}})
+    assert refused.startswith("Error: no such tool")
+
+    agent.messages += [user("q" * 6000 + " port is 9310"), {"role": "assistant", "content": "ok"}]
+    agent.messages, _ = context.fit(agent.messages + [user("current")], archive=agent.archive)
+    assert "search_history" in agent.available()
+    found = agent.run_tool({"function": {"name": "search_history", "arguments": {"pattern": "port is"}}})
+    assert "9310" in found and "[message 1, user]" in found

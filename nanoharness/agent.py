@@ -3,7 +3,7 @@ import json
 
 from . import client, config, context
 from .permissions import CURRENT, Denied, Permissions
-from .tools import REGISTRY, ToolError, file_tree, schemas
+from .tools import ARCHIVE, ON_DEMAND, REGISTRY, ToolError, file_tree, schemas
 
 
 def with_file_tree(prompt: str) -> str:
@@ -17,15 +17,21 @@ class Agent:
         # A resumed history gets today's system prompt: the code may have changed since.
         system = system or with_file_tree(config.system_prompt())
         self.messages = [{"role": "system", "content": system}] + (messages or [])[1:]
-        self.tools = list(tools or REGISTRY)   # names this agent may call; a subagent gets fewer
+        self.tools = list(tools or [n for n in REGISTRY if n not in ON_DEMAND])   # a subagent gets fewer
         self.max_steps = max_steps or config.MAX_STEPS
         self.depth = depth                     # 0 for the REPL's agent, 1 for a subagent
         self.stopped = False                   # did the last turn run out of steps?
         self.permissions = permissions or Permissions()
         self.session = session   # saved after every message when set
+        # Originals of what compaction summarized, for search_history; saved with the session.
+        self.archive = list(getattr(session, "archive", None) or [])
         # on_token(kind, text) shows the reply as it streams; kind "end" closes each reply.
         self.on_token = on_token
         self.dropped_input = False   # did the last failed turn discard the user's message?
+
+    def available(self):
+        """Tool names offered right now: search_history once there is an archive to search."""
+        return self.tools + (["search_history"] if self.archive and "search_history" not in self.tools else [])
 
     def run_tool(self, call) -> str:
         """Execute one tool call. Every failure comes back as text, never as a crash:
@@ -43,11 +49,12 @@ class Agent:
         if not isinstance(args, dict):
             return f"Error: arguments for {name} must be an object, got {type(args).__name__}."
 
-        tool = REGISTRY.get(name) if name in self.tools else None
+        tool = REGISTRY.get(name) if name in self.available() else None
         if tool is None:
-            return f"Error: no such tool {name!r}. Available tools: {', '.join(self.tools)}."
+            return f"Error: no such tool {name!r}. Available tools: {', '.join(self.available())}."
 
         token = CURRENT.set(self.permissions)
+        archive_token = ARCHIVE.set(self.archive)
         try:
             self.permissions.check(tool, args, who="subagent: " if self.depth else "")
             return tool.fn(**args)
@@ -61,6 +68,7 @@ class Agent:
             return f"Error: {name} failed unexpectedly: {type(e).__name__}: {e}"
         finally:
             CURRENT.reset(token)
+            ARCHIVE.reset(archive_token)
 
     def add_tool_result(self, name: str, content: str):
         self.messages.append({"role": "tool", "tool_name": name, "content": content})
@@ -70,7 +78,7 @@ class Agent:
         if self.session is None:
             return
         try:
-            self.session.save(self.messages)
+            self.session.save(self.messages, self.archive)
         except OSError as e:  # a full disk should not kill the conversation
             print(f"\033[31m  (could not save session: {e})\033[0m")
 
@@ -97,10 +105,11 @@ class Agent:
     def _loop(self):
         indent = "  " + "    " * self.depth
         for step in range(self.max_steps):
-            self.messages, note = context.fit(self.messages, schemas(self.tools))
+            self.messages, note = context.fit(self.messages, schemas(self.available()),
+                                              archive=self.archive)
             if note:
                 print(f"\033[90m{indent}({note})\033[0m")
-            reply = client.chat(self.messages, schemas(self.tools), on_token=self.on_token)
+            reply = client.chat(self.messages, schemas(self.available()), on_token=self.on_token)
             if self.on_token:
                 self.on_token("end", "")
             self.messages.append(reply)

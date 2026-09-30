@@ -169,3 +169,19 @@ def test_reset_starts_a_new_session_and_keeps_the_old(monkeypatch, capsys):
     script(monkeypatch, answer("a"), answer("b"))
     run_cli(monkeypatch, capsys, [], ["one", "/reset", "two"])
     assert len(session.list_sessions()) == 2
+
+
+def test_the_archive_survives_a_resume():
+    s = Session()
+    archived = [{"role": "user", "content": "the port is 9310"}]
+    s.save([{"role": "user", "content": "hi"}], archived)
+    sess, _ = session.load(s.id)
+    assert Agent(session=sess).archive == archived
+
+
+def test_sessions_saved_without_an_archive_still_load():
+    s = Session()
+    s.save([{"role": "user", "content": "hi"}])
+    assert "archive" not in saved(s)
+    sess, _ = session.load(s.id)
+    assert Agent(session=sess).archive == []

@@ -1,8 +1,10 @@
 """Tool registry: a JSON schema the model sees, plus a Python function that runs."""
+import json
 import os
 import re
 import signal
 import subprocess
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -25,6 +27,8 @@ class Tool:
 
 
 REGISTRY: dict[str, Tool] = {}
+# Offered only once they have something to work on (see Agent.available), not by default.
+ON_DEMAND = {"search_history"}
 
 
 def tool(name, description, parameters, writes, preview):
@@ -405,6 +409,84 @@ def grep(pattern, path=".", glob=None, ignore_case=False):
         out += (f"\n\n[stopped at {MAX_GREP_MATCHES} matches; narrow the pattern, "
                 "or pass path or glob]")
     return truncate(out)
+
+
+# --- earlier conversation --------------------------------------------------
+
+# The running agent's archive of summarized messages, set around each tool call.
+ARCHIVE: ContextVar[list] = ContextVar("archive", default=[])
+MAX_HISTORY_HITS = 20
+# Per message, so one big noisy message (a pasted log) cannot crowd out the rest: seen live,
+# 20 hits on filler in one file read hid the one line that mattered in a later message.
+MAX_HITS_PER_MESSAGE = 3
+SNIPPET_BEFORE, SNIPPET_AFTER = 150, 250   # a pasted paragraph can be one 3000-char line
+
+
+@tool(
+    name="search_history",
+    description="Search the earlier part of this conversation, which was replaced by a summary "
+                "to save context. The summary leaves details out; the full text is kept and "
+                "searchable here. Use it whenever the user refers to something from earlier (a "
+                "path, value, name or decision) that the summary does not state exactly. Returns "
+                "a snippet around each match, numbered by message.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "pattern": {"type": "string",
+                        "description": "Case-insensitive regular expression, e.g. 'load balancer|port'."},
+        },
+        "required": ["pattern"],
+    },
+    writes=False,
+    preview=lambda pattern="", **kw: f"search_history {pattern!r}",
+)
+def search_history(pattern):
+    archive = ARCHIVE.get()
+    if not archive:
+        return "Nothing has been summarized yet: the whole conversation is still in your context."
+    try:
+        rx = re.compile(pattern, re.IGNORECASE)
+    except re.error as e:
+        raise ToolError(f"Invalid regular expression {pattern!r}: {e}.") from None
+
+    hits, more = [], False
+    for i, m in enumerate(archive, start=1):
+        text = searchable(m)
+        label = f"tool result ({m.get('tool_name', '?')})" if m["role"] == "tool" else m["role"]
+        end, shown, extra = 0, 0, 0
+        for match in rx.finditer(text):
+            if shown and match.start() < end:
+                continue              # already inside the previous snippet
+            if shown == MAX_HITS_PER_MESSAGE:
+                extra += 1
+                continue
+            if len(hits) == MAX_HISTORY_HITS:
+                more = True
+                break
+            start = max(0, match.start() - SNIPPET_BEFORE)
+            end = min(len(text), match.end() + SNIPPET_AFTER)
+            snippet = " ".join(text[start:end].split())
+            hits.append(f"[message {i}, {label}] {'...' if start else ''}{snippet}"
+                        f"{'...' if end < len(text) else ''}")
+            shown += 1
+        if extra:
+            hits[-1] += f"\n[+{extra} more matches in message {i}; narrow the pattern to see them]"
+        if more:
+            break
+
+    if not hits:
+        return f"No matches for {pattern!r} in the {len(archive)} summarized messages."
+    out = "\n\n".join(hits)
+    if more:
+        out += f"\n\n[stopped at {MAX_HISTORY_HITS} matches; narrow the pattern]"
+    return truncate(out)
+
+
+def searchable(m) -> str:
+    """A message's text plus its tool calls, so what was written or run is findable too."""
+    calls = [f"{c.get('function', {}).get('name', '?')}({json.dumps(c.get('function', {}).get('arguments', {}))})"
+             for c in m.get("tool_calls") or []]
+    return "\n".join([m.get("content") or ""] + calls)
 
 
 # --- subagents -------------------------------------------------------------
