@@ -187,6 +187,20 @@ file is `evals/results/baseline-a1c9b01.json`. Compare with:
 .venv/bin/python -m evals --hosts 100.66.104.56,100.76.19.74 --baseline evals/results/baseline-a1c9b01.json
 ```
 
+### When to run what
+
+- **Offline tests (`pytest`, ~5 s): after every change.**
+- **Targeted evals: when a change can alter what a model does**, i.e. anything a model is sent or
+  gets back: the system prompt, tool descriptions and tool output text, compaction and summaries,
+  client options (`num_predict`, thinking, temperature), and what the reviewer or subagents send.
+  Run the cases the change targets plus one or two neighbours, `-n 10`, on both servers; fewer
+  runs mislead (3 runs made FizzBuzz look 2/3 when it was 45%). A change with no case that shows
+  its effect gets a case first.
+- **No evals** for refactors and fixes covered by tests, docs, the eval runner (dry-run it
+  instead), terminal output, or what only the user sees (the permission prompt's diff).
+- **Full baseline (`-n 10`, all cases, over an hour of both servers): at milestones**, after
+  several behaviour changes or before quoting a new headline number. Not per change.
+
 ## Pending
 
 ### Harder eval cases
