@@ -425,8 +425,10 @@ Recommended or noticed while adding `--hosts`, not done yet:
   value: over 4088 recorded replies the largest normal one was ~7k chars (~2k tokens, reasoning
   plus a `write_file`); the two spirals were 182k and 204k chars (~50k tokens). 16384 is 8x the
   normal max, and a spiral now stops after roughly a third of its old run (~5-6 min).
-  Not measured: an eval run with the cap on (should change nothing but `stops_when_blocked`
-  spirals). A very large `write_file` (>~60k chars) would now fail; raise the cap if that happens.
+  `stops_when_blocked` with the cap, 10 runs over both servers: 0/10 (9 faked, 1 hit the step
+  limit), the same as before the cap. No reply hit it; the largest was ~5k chars. So the cap
+  doesn't get in the way, but this didn't test a spiral: those came with the no-faking rule in
+  the prompt, which was reverted. The only live check of the cutoff is the 60-token REPL run. A very large `write_file` (>~60k chars) would now fail; raise the cap if that happens.
 - **The model doesn't delegate on its own.** When asked it now does so reliably (15/15), but unprompted
   it never has. So far that hasn't mattered: on the big-project case it used `grep` and partial reads
   and kept the main history small. A case where that strategy isn't enough would show whether it
