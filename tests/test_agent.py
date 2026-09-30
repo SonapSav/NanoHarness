@@ -141,3 +141,34 @@ def test_repeats_are_counted_per_turn_and_can_be_switched_off(agent, monkeypatch
            reply("", tool_call("grep", pattern="y")), reply("no"))
     agent.turn("three")
     assert not any("already made" in m["content"] for m in agent.messages if m["role"] == "tool")
+
+
+def test_review_sees_the_turns_diff_and_warns(agent, monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(config, "REVIEW", True)
+    (tmp_path / "db.py").write_text("def ping():\n    return connect()\n")
+    seen = []
+    script(monkeypatch,
+           reply("", tool_call("edit_file", path="db.py", old_string="return connect()",
+                               new_string="return True")),
+           reply("Tests pass now."),
+           {"role": "assistant", "content": "FAKED: ping() always returns True."})
+    real_chat = client.chat
+    monkeypatch.setattr(client, "chat", lambda m, *a, **k: (seen.append(m), real_chat(m, *a, **k))[1])
+    assert agent.turn("get the tests passing") == "Tests pass now."   # the answer is untouched
+    assert "-    return connect()" in seen[-1][0]["content"] and "+    return True" in seen[-1][0]["content"]
+    assert agent.verdict == (True, "ping() always returns True.")
+    assert "⚠ review" in capsys.readouterr().out
+
+
+def test_no_review_for_a_turn_that_wrote_nothing(agent, monkeypatch):
+    monkeypatch.setattr(config, "REVIEW", True)
+    script(monkeypatch, reply("", tool_call("glob", pattern="*")), reply("Nothing here."))
+    agent.turn("what's here?")        # StopIteration if it made a third (review) call
+    assert agent.verdict is None
+
+
+def test_a_failed_review_keeps_the_turn(agent, monkeypatch):
+    monkeypatch.setattr(config, "REVIEW", True)
+    script(monkeypatch, reply("", tool_call("write_file", path="a.txt", content="x")),
+           reply("Done."), ModelError("down"))
+    assert agent.turn("write a.txt") == "Done."

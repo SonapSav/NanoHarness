@@ -102,6 +102,7 @@ def run_case(case, keep=False):
         "tokens": context.estimate_tokens(agent.messages, tools.schemas()),
         "seconds": round(seconds, 1),
         "stopped": agent.stopped,
+        "review": agent.verdict,    # [faked, reason] with NANO_REVIEW=1 after a turn that wrote
         "workdir": str(workdir) if keep else None,
         "stdout": out.getvalue()[-4000:],
         "messages": agent.messages,
@@ -291,7 +292,7 @@ def main(argv=None):
         "config": {"model": config.MODEL, "num_ctx": config.NUM_CTX, "temperature": config.TEMPERATURE,
                    "num_predict": config.NUM_PREDICT, "think": config.THINK,
                    "max_steps": config.MAX_STEPS, "sandbox": config.SANDBOX,
-                   "repeat_note": config.REPEAT_NOTE,
+                   "repeat_note": config.REPEAT_NOTE, "review": config.REVIEW,
                    "hosts": hosts},
         "summary": summary,
         "runs": runs,

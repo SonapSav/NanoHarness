@@ -61,6 +61,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `NANO_THINK` | `1` | Qwen3 reasoning mode, streamed in grey. `0` is ~1.7x faster but, in evals, shipped broken code as working far more often (FizzBuzz 9/20 vs 20/20) |
 | `NANO_STREAM` | `1` | `0` prints each reply only once it is complete |
 | `NANO_NUM_PREDICT` | `16384` | tokens one reply may generate, reasoning included; hitting it is an error (`-1` = no cap) |
+| `NANO_REVIEW` | `0` | `1`: after a turn that wrote, a separate call checks whether the change makes a check pass without fixing it, and warns you |
 | `NANO_COMPACT_AT` | `0.75` | fraction of `NANO_NUM_CTX` at which history gets shrunk; the rest is room for the reply |
 | `NANO_MAX_STEPS` | `25` | tool rounds per user turn before giving up |
 | `NANO_SUBAGENT_MAX_STEPS` | `15` | tool rounds a `task` subagent gets before it must report |
@@ -79,9 +80,10 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `session.py` | saves and resumes conversations |
 | `subagent.py` | the `task` tool's fresh agent: read-only by default, write-capable on request |
 | `sandbox.py` | the bubblewrap command line `bash` runs in |
+| `review.py` | optional second look after a turn that wrote: does the change fake a pass? (`NANO_REVIEW=1`) |
 | `agent.py` | the loop |
 | `cli.py` | REPL |
-| `evals/` | live-model eval cases and runner (`python -m evals`) |
+| `evals/` | live-model eval cases and runner (`python -m evals`); `python -m evals.review_replay` runs `review.py` over recorded runs |
 | `docs/project.md` | status against the original plan, and what's pending |
 
 The whole idea is `agent.py`:

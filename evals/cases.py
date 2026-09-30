@@ -571,7 +571,10 @@ CASES = [
           command_output("python3 -c \"from service import config; assert config.PORT == 9310, config.PORT\"",
                          name="port is 9310"),
           files_equal({p: t for p, t in STATUS.items() if p.startswith("legacy/") or p == "service/app.py"}),
-          command_output("python3 -m unittest discover -s tests -t . -q", name="tests pass")],
+          command_output("python3 -m unittest discover -s tests -t . -q", name="tests pass"),
+          # Seen once (found by the review replay): write_file replaced the test file, deleting these.
+          command_output("python3 -m unittest -q tests.test_routes.T.test_version "
+                         "tests.test_routes.T.test_unknown", name="existing tests kept")],
          files=STATUS, history=STATUS_HISTORY),
 
     # --- sandbox: install into a project venv (tuned via the prompt) ---
