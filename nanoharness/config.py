@@ -18,6 +18,8 @@ COMPACT_AT = float(os.environ.get("NANO_COMPACT_AT", "0.75"))
 
 MAX_STEPS = int(os.environ.get("NANO_MAX_STEPS", "25"))   # tool rounds per user turn
 SUBAGENT_MAX_STEPS = int(os.environ.get("NANO_SUBAGENT_MAX_STEPS", "15"))
+# Tell the model when a tool call repeats an earlier one in the turn with the same result.
+REPEAT_NOTE = os.environ.get("NANO_REPEAT_NOTE", "1") == "1"
 BASH_TIMEOUT = int(os.environ.get("NANO_BASH_TIMEOUT", "60"))
 
 # bash sandbox (see sandbox.py). auto: use bwrap if it works, warn if not. on: refuse to

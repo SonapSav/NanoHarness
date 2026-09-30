@@ -5,6 +5,13 @@ from . import client, config, context
 from .permissions import CURRENT, Denied, Permissions
 from .tools import ARCHIVE, ON_DEMAND, REGISTRY, ToolError, file_tree, schemas
 
+# Seen live: a search found the answer, the model overlooked it and ran the same grep over and
+# over until it hit the step limit. The call still runs (a rerun after an edit can differ);
+# only an identical result gets the note.
+REPEAT_NOTE = ("\n\n[You already made this exact call earlier in this turn and got the same "
+               "result. Repeating it won't change anything: try something different, or tell the "
+               "user what you could not find.]")
+
 
 def with_file_tree(prompt: str) -> str:
     return (prompt + "\nFiles in the working directory when this session started (skips .git, "
@@ -104,6 +111,7 @@ class Agent:
 
     def _loop(self):
         indent = "  " + "    " * self.depth
+        seen = {}   # (tool, arguments) -> last result, for this turn
         for step in range(self.max_steps):
             self.messages, note = context.fit(self.messages, schemas(self.available()),
                                               archive=self.archive)
@@ -141,6 +149,12 @@ class Agent:
                             "It did NOT run."
                         ))
                     raise
+                if config.REPEAT_NOTE:
+                    key = (name, json.dumps(call.get("function", {}).get("arguments"), sort_keys=True))
+                    repeated = seen.get(key) == result
+                    seen[key] = result
+                    if repeated:
+                        result += REPEAT_NOTE
                 self.add_tool_result(name, result)
 
         self.stopped = True

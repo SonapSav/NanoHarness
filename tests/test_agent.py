@@ -102,3 +102,42 @@ def test_next_turn_after_interrupt_is_well_formed(agent, monkeypatch):
 def test_system_prompt_names_the_current_workdir(agent, tmp_path):
     """Regression: the prompt was frozen at import, so it named the wrong directory."""
     assert str(tmp_path) in agent.messages[0]["content"]
+
+
+
+def test_an_identical_repeated_call_is_pointed_out(agent, monkeypatch):
+    script(monkeypatch,
+           reply("", tool_call("grep", pattern="timeout")),
+           reply("", tool_call("grep", pattern="timeout")),
+           reply("Not found."))
+    agent.turn("find the timeout")
+    results = [m["content"] for m in agent.messages if m["role"] == "tool"]
+    assert "already made this exact call" not in results[0]
+    assert "already made this exact call" in results[1]
+
+
+def test_a_repeat_with_a_different_result_is_not_flagged(agent, monkeypatch, tmp_path):
+    script(monkeypatch,
+           reply("", tool_call("read_file", path="a.txt")),
+           reply("", tool_call("write_file", path="a.txt", content="two")),
+           reply("", tool_call("read_file", path="a.txt")),
+           reply("Done."))
+    (tmp_path / "a.txt").write_text("one")
+    agent.turn("change a.txt")
+    reads = [m["content"] for m in agent.messages if m.get("tool_name") == "read_file"]
+    assert "two" in reads[1] and "already made this exact call" not in reads[1]
+
+
+def test_repeats_are_counted_per_turn_and_can_be_switched_off(agent, monkeypatch):
+    script(monkeypatch,
+           reply("", tool_call("grep", pattern="x")), reply("no"),
+           reply("", tool_call("grep", pattern="x")), reply("no"))
+    agent.turn("one")
+    agent.turn("two")                                    # a new turn: not a repeat
+    assert not any("already made" in m["content"] for m in agent.messages if m["role"] == "tool")
+
+    monkeypatch.setattr(config, "REPEAT_NOTE", False)
+    script(monkeypatch, reply("", tool_call("grep", pattern="y")),
+           reply("", tool_call("grep", pattern="y")), reply("no"))
+    agent.turn("three")
+    assert not any("already made" in m["content"] for m in agent.messages if m["role"] == "tool")
