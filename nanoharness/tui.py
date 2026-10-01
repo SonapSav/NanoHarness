@@ -8,6 +8,8 @@ redrawn in place.
 
 RichUI is both the UI (ui.py's interface) and the REPL's on_token stream printer. Stdlib only.
 """
+import difflib
+import os
 import re
 import shutil
 import sys
@@ -74,18 +76,68 @@ def title(name, args):
     return f"{TITLES.get(name, name)}({main})"
 
 
-def colour_diff(lines):
-    out = []
-    for line in lines:
-        bare = line.strip()
-        if bare.startswith("+") and not bare.startswith("+++"):
-            out.append(f"{GREEN}{line}{RESET}")
-        elif bare.startswith("-") and not bare.startswith("---"):
-            out.append(f"{RED}{line}{RESET}")
-        elif bare.startswith("@@"):
-            out.append(f"{CYAN}{line}{RESET}")
+# Diff backgrounds: faded red and green bars, and a stronger tint on the words that changed.
+# Truecolor where the terminal says it has it, else the nearest of the 256 colours.
+TRUECOLOR = os.environ.get("COLORTERM", "").lower() in ("truecolor", "24bit")
+DEL_BG, DEL_WORD, ADD_BG, ADD_WORD = (
+    ("\033[48;2;61;20;24m", "\033[48;2;125;36;44m", "\033[48;2;20;54;31m", "\033[48;2;33;110;58m")
+    if TRUECOLOR else ("\033[48;5;52m", "\033[48;5;88m", "\033[48;5;22m", "\033[48;5;28m"))
+TEXT = "\033[39m"          # the terminal's own text colour: readable on either tint
+
+
+def words(text):
+    return re.findall(r"\w+|\s+|[^\w\s]", text)
+
+
+def highlight(old, new):
+    """(old, new) with the words that differ wrapped in the stronger tint."""
+    a, b = words(old), words(new)
+    out_a, out_b = [], []
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        left, right = "".join(a[i1:i2]), "".join(b[j1:j2])
+        if op == "equal":
+            out_a.append(left)
+            out_b.append(right)
+        else:
+            out_a.append(f"{DEL_WORD}{left}{DEL_BG}" if left else "")
+            out_b.append(f"{ADD_WORD}{right}{ADD_BG}" if right else "")
+    return "".join(out_a), "".join(out_b)
+
+
+def render_diff(lines, width=None):
+    """Unified diff lines -> coloured lines: removed and added as tinted bars `width` wide
+    (None: as long as the text), changed words stronger, context dim, the header cyan."""
+    def bar(sign, body, bg, sign_colour):
+        line = f"{bg}{sign_colour}{sign}{TEXT}{body}"
+        fill = max(0, (width or 0) - 1 - visible(body))
+        return f"{line}{' ' * fill}{RESET}"
+
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("-") and not line.startswith("---"):
+            removed = []
+            while i < len(lines) and lines[i].startswith("-") and not lines[i].startswith("---"):
+                removed.append(lines[i][1:])
+                i += 1
+            added = []
+            while i < len(lines) and lines[i].startswith("+") and not lines[i].startswith("+++"):
+                added.append(lines[i][1:])
+                i += 1
+            pairs = list(zip(removed, added))           # paired line for line: words highlighted
+            marked = [highlight(old, new) for old, new in pairs]
+            for k, text in enumerate(removed):
+                out.append(bar("-", marked[k][0] if k < len(pairs) else text, DEL_BG, RED))
+            for k, text in enumerate(added):
+                out.append(bar("+", marked[k][1] if k < len(pairs) else text, ADD_BG, GREEN))
+            continue
+        if line.startswith("+") and not line.startswith("+++"):
+            out.append(bar("+", line[1:], ADD_BG, GREEN))
+        elif line.startswith("@@"):
+            out.append(f"{CYAN}{DIM}{line}{RESET}")
         else:
             out.append(f"{GREY}{line}{RESET}")
+        i += 1
     return out
 
 
@@ -216,7 +268,7 @@ class RichUI(ui.PlainUI):
             diff = self.diffs.pop(depth, None)
             if diff and not str(result).startswith("Error"):
                 shown = [l[4:] if l.startswith("    ") else l for l in diff][:DIFF_LINES]
-                lines += colour_diff(shown)
+                lines += render_diff(shown, self.width() - 1 - 5)   # 5: the indent below
                 if len(diff) > DIFF_LINES:
                     lines.append(f"{GREY}… +{len(diff) - DIFF_LINES} diff lines{RESET}")
             for i, line in enumerate(lines):
@@ -229,7 +281,8 @@ class RichUI(ui.PlainUI):
             head, *diff = preview.splitlines()
             if who:   # the main agent's header is just above; a subagent's call needs naming
                 self._commit(f"{YELLOW}  ? {who}{title(tool.name, args)}{RESET}")
-            for line in colour_diff([l[4:] if l.startswith("    ") else l for l in diff]):
+            for line in render_diff([l[4:] if l.startswith("    ") else l for l in diff],
+                                    self.width() - 1 - 5):
                 self._commit("     " + line)
             self.diffs.pop(1 if who else 0, None)    # shown here; not again under the result
             paused = self.running
@@ -491,7 +544,8 @@ class LiveUI(RichUI):
             head, *diff = preview.splitlines()
             if who:
                 self._commit(f"{YELLOW}  ? {who}{title(tool.name, args)}{RESET}")
-            for line in colour_diff([l[4:] if l.startswith("    ") else l for l in diff]):
+            for line in render_diff([l[4:] if l.startswith("    ") else l for l in diff],
+                                    self.width() - 1 - 5):
                 self._commit("     " + line)
             self.diffs.pop(1 if who else 0, None)
             paused, self.running = self.running, []

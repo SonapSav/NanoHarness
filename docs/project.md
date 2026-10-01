@@ -83,7 +83,9 @@ the evals read that output (they count subagent calls from its `↳` lines and a
 `input()`), so they and the tests ran unchanged. Phase 1: `RichUI`, chosen by the REPL in a terminal
 (`--plain` to opt out). Reasoning folds to `✻ Thought for Ns` with a spinner while it runs; tool
 calls show as `⏺ Write(path)` with a short `⎿` result (`bash`: first output lines, red exit code;
-errors red); edits show a coloured diff once, at the permission prompt or under the result with
+errors red); edits show a diff once (removed and added lines as full-width faded red and green
+bars with light text, the changed words in a stronger tint via `difflib` on paired lines; truecolor
+when `COLORTERM` says so, else 256 colours), at the permission prompt or under the result with
 `--yolo`; subagent calls nest as `⎿ ↳ Grep(...)`; answers stream line by line with light markdown
 (headings, bullets, `code`, **bold**, fenced code) and wrap at the terminal width so the live line
 never wraps; the spinner also covers running tools (`Running Bash… 4s`), closing the gap above.
@@ -731,6 +733,8 @@ Recommended or noticed while adding `--hosts`, not done yet:
   edge can shift on lines that contain them.
 - **Not tried in tmux or a non-Linux terminal** (Windows has no `termios`: it falls back to phase 1).
 - **Phase 3:** `/` command completion; expanding a folded result or the reasoning on demand.
+- **Diffs, not done:** line numbers in a gutter instead of the `@@` header; a light-theme setting
+  (`NANO_THEME=light`), since the dark tints look wrong on a white background.
 - **The startup panel spans the full width and is printed once**, so narrowing the window after
   startup rewraps its rows and breaks its right border (the input box redraws and is fine). A fix,
   if it bothers: redraw it on a `/clear`-style command.

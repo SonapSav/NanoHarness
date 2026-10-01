@@ -298,3 +298,29 @@ def test_footer_is_amber():
     u, _ = live()
     u.footer = "~/p · model · ctx 1%"
     assert u.region()[-1].startswith(tui.ORANGE)
+
+
+def test_diff_bars_fill_the_width_and_mark_only_the_changed_words():
+    out = tui.render_diff(["@@ -1 +1 @@", " same", "-weather for Abu Dhabi.", "+weather for Doha."], 40)
+    removed, added = out[2], out[3]
+    assert tui.visible(removed) == tui.visible(added) == 40               # full-width bars
+    assert removed.startswith(tui.DEL_BG) and added.startswith(tui.ADD_BG)
+    assert f"{tui.DEL_WORD}Abu Dhabi{tui.DEL_BG}" in removed
+    assert f"{tui.ADD_WORD}Doha{tui.ADD_BG}" in added
+    assert tui.DEL_WORD + "weather" not in removed                        # unchanged words stay faded
+    assert tui.DEL_BG not in out[1] and tui.ADD_BG not in out[1]          # context: no bar
+
+
+def test_unpaired_lines_get_a_bar_without_word_marks():
+    out = tui.render_diff(["-gone", "-also gone", "+new"], None)
+    assert len(out) == 3 and tui.ADD_WORD in out[2] and tui.DEL_WORD in out[0]   # paired: gone/new
+    assert tui.DEL_WORD not in out[1]                                     # nothing to pair with
+    assert tui.visible(out[1]) == len("-also gone")                       # width None: text only
+
+
+def test_diff_colours_fall_back_to_256_without_truecolor(monkeypatch):
+    import importlib
+    monkeypatch.setenv("COLORTERM", "")
+    assert "48;5;" in importlib.reload(tui).DEL_BG
+    monkeypatch.setenv("COLORTERM", "truecolor")
+    assert "48;2;" in importlib.reload(tui).DEL_BG

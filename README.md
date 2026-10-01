@@ -32,7 +32,7 @@ nanoharness --plain      # the plain line-by-line output (the default when not i
 
 In a terminal the output looks like Claude Code's or Pi's, inline so it stays in the
 terminal's scrollback: the model's reasoning folds to `✻ Thought for 4s`, each tool call is a
-`⏺ Write(weather.py)` line with a short `⎿` result (edits as a coloured diff), answers get light
+`⏺ Write(weather.py)` line with a short `⎿` result (edits as a diff on faded red and green bars, the changed words in a stronger tint), answers get light
 markdown, and a spinner with a timer shows whenever the model or a tool is busy. Input is a box
 that stays at the bottom while the conversation scrolls above it, with a footer (directory, model, context used, the last turn's time in ms,
 key hints):
