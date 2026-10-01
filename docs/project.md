@@ -75,6 +75,23 @@ has come for a second, a grey status line counts in place (`⠋ working · 12s`,
 model` before the first token) and clears when anything arrives or the reply ends. Not covered: a
 long `bash` command or a subagent, which run after the reply ends.
 
+**Terminal UI, phases 0-1** (`ui.py`, `tui.py`). The look of Claude Code and Pi, stdlib only:
+inline, so the conversation stays in the terminal's scrollback and only the bottom line is redrawn.
+Phase 0: everything the agent shows or asks (tool lines, notes, review warnings, permission
+prompts) goes through `ui.current`, whose default `PlainUI` prints exactly what was printed before;
+the evals read that output (they count subagent calls from its `↳` lines and answer prompts through
+`input()`), so they and the tests ran unchanged. Phase 1: `RichUI`, chosen by the REPL in a terminal
+(`--plain` to opt out). Reasoning folds to `✻ Thought for Ns` with a spinner while it runs; tool
+calls show as `⏺ Write(path)` with a short `⎿` result (`bash`: first output lines, red exit code;
+errors red); edits show a coloured diff once, at the permission prompt or under the result with
+`--yolo`; subagent calls nest as `⎿ ↳ Grep(...)`; answers stream line by line with light markdown
+(headings, bullets, `code`, **bold**, fenced code) and wrap at the terminal width so the live line
+never wraps; the spinner also covers running tools (`Running Bash… 4s`), closing the gap above.
+↑/↓ recall input across runs (`readline`, history next to the sessions). Checked live in a
+pseudo-terminal, with and without `--yolo`. Not done (phase 2): a bordered input box and a status
+footer that stay at the bottom while output scrolls, Esc to interrupt, arrow-key permission menus,
+multi-line input; phase 3: `/` completion, expanding a folded result.
+
 **`grep` / `glob`** (`tools.py`). Pure Python, read-only (no prompts), skipping `.git`, `.venv`,
 `node_modules`, caches and binary files, and never following a symlink out of `WORKDIR`. Tool
 descriptions steer the model to them: in live runs, content searches went through `grep` 4/4 and
@@ -679,6 +696,15 @@ Recommended or noticed while adding `--hosts`, not done yet:
   right first time, not by making the model check what it ran (tool calls stayed at exactly 2: write,
   run). A task where the first attempt is usually wrong would expose this again.
 - **Made-up command output is rare but real**: about 1 in 20 runs without reasoning mode.
+
+### Terminal UI
+
+- **Phase 2: the live bottom area.** A bordered input box and a status footer (model, context
+  used, session) that stay at the bottom while output scrolls above; Esc to interrupt; arrow-key
+  permission menus instead of y/n/a; multi-line input (pasting a log as one message). Needs raw
+  keyboard input (`termios`/`tty`) and a reader thread while the agent runs; watch terminal
+  resizes and tmux.
+- **Phase 3:** `/` command completion; expanding a folded result or the reasoning on demand.
 
 ### Known limitations
 

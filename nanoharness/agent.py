@@ -1,7 +1,7 @@
 """The loop. Everything else exists to serve these ~40 lines."""
 import json
 
-from . import client, config, context, review
+from . import client, config, context, review, ui
 from .permissions import CURRENT, Denied, Permissions
 from .tools import ARCHIVE, ON_DEMAND, REGISTRY, ToolError, file_tree, resolve, schemas
 
@@ -113,11 +113,9 @@ class Agent:
             self.verdict = review.review(request, changes.strip(), self.last_command, answer,
                                          self.steps)
         except Exception as e:  # a failed review must not cost the user the turn
-            print(f"\033[90m  (review failed: {e})\033[0m")
+            ui.current.review_failed(e)
             return
-        if self.verdict[0]:
-            print(f"\033[33m  ⚠ review: this may make a check pass without fixing it: "
-                  f"{self.verdict[1]}\033[0m")
+        ui.current.review(*self.verdict)
 
     def add_tool_result(self, name: str, content: str):
         self.messages.append({"role": "tool", "tool_name": name, "content": content})
@@ -129,7 +127,7 @@ class Agent:
         try:
             self.session.save(self.messages, self.archive)
         except OSError as e:  # a full disk should not kill the conversation
-            print(f"\033[31m  (could not save session: {e})\033[0m")
+            ui.current.warning(f"could not save session: {e}")
 
     def turn(self, user_input: str):
         """One user message in, one final assistant message out (via N tool rounds)."""
@@ -158,13 +156,12 @@ class Agent:
             self.save()
 
     def _loop(self):
-        indent = "  " + "    " * self.depth
         seen = {}   # (tool, arguments) -> last result, for this turn
         for step in range(self.max_steps):
             self.messages, note = context.fit(self.messages, schemas(self.available()),
                                               archive=self.archive)
             if note:
-                print(f"\033[90m{indent}({note})\033[0m")
+                ui.current.note(note, self.depth)
             if self.on_token:
                 self.on_token("start", "")
             reply = client.chat(self.messages, schemas(self.available()), on_token=self.on_token)
@@ -179,11 +176,11 @@ class Agent:
 
             # Narration between tool calls; a subagent's stays quiet, only its report matters.
             if reply.get("content", "").strip() and not self.on_token and not self.depth:
-                print(f"\033[90m{reply['content'].strip()}\033[0m")
+                ui.current.narration(reply["content"].strip())
 
             for i, call in enumerate(calls):
                 name = call.get("function", {}).get("name", "?")
-                print(f"\033[36m{indent}{'↳' if self.depth else '→'} {name}\033[0m")
+                ui.current.tool_call(name, call.get("function", {}).get("arguments"), self.depth)
                 try:
                     result = self.run_tool(call)
                 except KeyboardInterrupt:
@@ -206,6 +203,8 @@ class Agent:
                     seen[key] = result
                     if repeated:
                         result += REPEAT_NOTE
+                ui.current.tool_result(name, call.get("function", {}).get("arguments"), result,
+                                       self.depth)
                 self.add_tool_result(name, result)
 
         self.stopped = True

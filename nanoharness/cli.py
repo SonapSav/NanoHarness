@@ -4,7 +4,7 @@ import sys
 import threading
 import time
 
-from . import config, sandbox, session
+from . import config, sandbox, session, tui, ui
 from .agent import Agent
 from .client import ModelError
 from .permissions import Permissions
@@ -23,9 +23,17 @@ BANNER = """\033[1mNanoHarness\033[0m
 """
 
 
+PROMPT = "\033[1m> \033[0m"
+# With readline, colour codes in the prompt must be marked zero-width, or it miscounts the
+# line and editing goes wrong; without it the markers would print.
+READLINE_PROMPT = "\001\033[1m\002> \001\033[0m\002"
+
+
 def parse_args(argv):
     p = argparse.ArgumentParser(prog="nanoharness", description="A coding agent harness, stdlib only.")
     p.add_argument("--yolo", action="store_true", help="skip permission prompts")
+    p.add_argument("--plain", action="store_true",
+                   help="plain output (the default when not in a terminal)")
     g = p.add_mutually_exclusive_group()
     g.add_argument("-c", "--continue", dest="cont", action="store_true",
                    help="resume the latest session in this directory")
@@ -42,25 +50,35 @@ def main(argv=None):
         print(f"\033[31m{e}\033[0m")
         return 1
 
-    print(BANNER.format(
-        model=config.MODEL,
-        host=config.OLLAMA_HOST,
-        workdir=config.WORKDIR,
-        ctx=config.NUM_CTX,
-        session=sess.id,
-        sandbox=sandbox_line(),
-        yolo="\n  \033[31myolo     permissions disabled\033[0m" if args.yolo else "",
-    ))
+    rich = config.STREAM and sys.stdout.isatty() and not args.plain
+    if rich:
+        print(rich_banner(sess.id, args.yolo))
+    else:
+        print(BANNER.format(
+            model=config.MODEL,
+            host=config.OLLAMA_HOST,
+            workdir=config.WORKDIR,
+            ctx=config.NUM_CTX,
+            session=sess.id,
+            sandbox=sandbox_line(),
+            yolo="\n  \033[31myolo     permissions disabled\033[0m" if args.yolo else "",
+        ))
     if history:
         print(f"\033[90mresumed · {len(history)} messages · last request: "
               f"{last_request(history)!r}\033[0m\n")
+    if sys.stdin.isatty():
+        input_history()
 
-    printer = StreamPrinter() if config.STREAM else None
+    if rich:
+        printer = tui.RichUI()
+        ui.use(printer)
+    else:
+        printer = StreamPrinter() if config.STREAM else None
     agent = Agent(Permissions(yolo=args.yolo), on_token=printer, session=sess, messages=history)
 
     while True:
         try:
-            user_input = input("\033[1m> \033[0m").strip()
+            user_input = input(PROMPT).strip()
         except (EOFError, KeyboardInterrupt):
             print()
             return 0
@@ -198,6 +216,53 @@ class StreamPrinter:
             sys.stdout.write("\r\033[2K")
             sys.stdout.flush()
             self.status = False
+
+
+def rich_banner(session_id, yolo):
+    rows = [("model", config.MODEL), ("host", config.OLLAMA_HOST), ("workdir", str(config.WORKDIR)),
+            ("session", session_id), ("sandbox", strip_ansi(sandbox_line()))]
+    if yolo:
+        rows.append(("yolo", "permissions disabled"))
+    inner = max(len(f"{k:<8} {v}") for k, v in rows) + 2
+    top = f"\033[38;5;208m╭─ ✻ \033[1mNanoHarness\033[0m\033[38;5;208m {'─' * (inner - 15)}╮\033[0m"
+    body = [f"\033[38;5;208m│\033[0m {k:<8} {v:<{inner - 11}} \033[38;5;208m│\033[0m"
+            if k != "yolo" else
+            f"\033[38;5;208m│\033[0m \033[31m{k:<8} {v:<{inner - 11}}\033[0m \033[38;5;208m│\033[0m"
+            for k, v in rows]
+    bottom = f"\033[38;5;208m╰{'─' * inner}╯\033[0m"
+    help_line = ("\033[90m  /exit · /reset · /sessions · /resume [n|id] · /messages   "
+                 "(startup: -c latest, --resume pick)\033[0m\n")
+    return "\n".join([top, *body, bottom, help_line])
+
+
+def strip_ansi(text):
+    import re
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
+def input_history():
+    """Up/down recall of earlier input, kept between runs. Best effort: no readline, no history."""
+    try:
+        import atexit
+        import readline
+    except ImportError:
+        return
+    path = config.SESSION_DIR.parent / "input_history"
+    try:
+        readline.read_history_file(path)
+    except OSError:
+        pass
+    readline.set_history_length(1000)
+    global PROMPT
+    PROMPT = READLINE_PROMPT
+
+    def save():
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            readline.write_history_file(path)
+        except OSError:
+            pass
+    atexit.register(save)
 
 
 def sandbox_line():

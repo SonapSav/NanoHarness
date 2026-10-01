@@ -5,6 +5,7 @@ with a per-session 'always allow this tool' escape hatch.
 """
 from contextvars import ContextVar
 
+from . import ui
 from .tools import Tool
 
 # The Permissions of the agent whose tool is running right now. A subagent started by the
@@ -31,8 +32,7 @@ class Permissions:
         except TypeError:
             preview = f"{tool.name}({args})"
 
-        print(f"\n  \033[33m{who}{preview}\033[0m")
-        answer = input("  allow? [y]es / [n]o / [a]lways for this tool: ").strip().lower()
+        answer = ui.current.permission(who, preview, tool, args).strip().lower()
 
         if answer.startswith("a"):
             self.always.add(tool.name)
