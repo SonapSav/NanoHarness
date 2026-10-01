@@ -88,3 +88,13 @@ def test_temperature_can_be_set_per_call(monkeypatch):
     client.chat([{"role": "user", "content": "hi"}], temperature=0.2)
     assert sent[0]["options"]["temperature"] == config.TEMPERATURE
     assert sent[1]["options"] == {**sent[0]["options"], "temperature": 0.2}
+
+
+def test_token_counts_from_the_last_line_add_up():
+    from nanoharness import client
+    before = dict(client.USAGE)
+    last = (json.dumps({"message": {"role": "assistant", "content": ""}, "done": True,
+                        "prompt_eval_count": 1200, "eval_count": 34}) + "\n").encode()
+    read_stream([line(content="hi"), last])
+    read_stream([line(content="again"), last])
+    assert client.USAGE["in"] - before["in"] == 2400 and client.USAGE["out"] - before["out"] == 68

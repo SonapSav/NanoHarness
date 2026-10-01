@@ -7,6 +7,11 @@ import urllib.request
 from . import config
 
 
+# Tokens used by every reply in this process, as Ollama reports them on its last line: the
+# REPL subtracts before and after a turn. "in" is the whole prompt each time, cached or not.
+USAGE = {"in": 0, "out": 0}
+
+
 class ModelError(RuntimeError):
     pass
 
@@ -95,6 +100,8 @@ def read_stream(lines, on_token=None):
         tool_calls.extend(message.get("tool_calls") or [])
 
         if chunk.get("done"):
+            USAGE["in"] += chunk.get("prompt_eval_count") or 0
+            USAGE["out"] += chunk.get("eval_count") or 0
             if chunk.get("done_reason") == "length":
                 where = "while still reasoning" if not content and not tool_calls else "mid-reply"
                 raise ModelError(

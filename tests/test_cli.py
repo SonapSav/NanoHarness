@@ -182,3 +182,21 @@ def test_every_listed_command_is_handled_and_counted(monkeypatch):
         cli.step(cli.Agent(session=cli.Session()), None, None, args, name)   # as the REPL has
     text = re.sub(r"\x1b\[[0-9;]*m", "", cli.rich_banner("x", False, columns=120))
     assert f"8 tools · {len(cli.COMMANDS)} commands · /help for commands" in text
+
+
+def test_footer_shows_the_last_turns_tokens(monkeypatch):
+    agent = cli.Agent()
+    agent.last_turn_ms, agent.last_turn_tokens = 900, (23410, 1191)
+    assert cli.footer(agent).endswith(" · 900 ms · 23.4k in / 1.2k out")
+    agent.last_turn_tokens = (512, 40)
+    assert cli.footer(agent).endswith(" · 512 in / 40 out")
+
+
+def test_a_turn_records_every_model_call_it_made(monkeypatch):
+    def model(*a, **k):
+        client.USAGE["in"] += 1000
+        client.USAGE["out"] += 10
+        return {"role": "assistant", "content": "hi"}
+    monkeypatch.setattr(client, "chat", model)
+    agent = cli.step(cli.Agent(session=cli.Session()), None, None, cli.parse_args([]), "hello")
+    assert agent.last_turn_tokens == (1000, 10)

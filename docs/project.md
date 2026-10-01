@@ -103,7 +103,7 @@ pseudo-terminal, with and without `--yolo`.
 
 **Terminal UI, phase 2** (`LiveUI` in `tui.py`, `keys.py`). A bottom area that stays put while the
 conversation scrolls into scrollback: the spinner or the answer line being written, a bordered input
-box, and a footer (directory, model, context used, the last turn's time in ms, key hints; the hints give way on a narrow terminal). The terminal runs key-at-a-time with no echo
+box, and a footer (directory, model, context used, the last turn's time in ms and tokens, key hints; the hints give way on a narrow terminal). The terminal runs key-at-a-time with no echo
 and no signal keys (`termios`), so Ctrl-C and Esc are keys the UI interprets: during a turn they
 send the process a real SIGINT (it breaks a blocked network read), otherwise Ctrl-C clears the box
 and twice exits. A reader thread handles keys while the agent works, so Enter during a turn queues
@@ -126,6 +126,12 @@ while the reviewer (a model call with reasoning) checked the edits and found not
 shows it (`✻ Checking the changes… 12s · esc to skip`), and Esc or Ctrl-C during it skips only the
 review (`(review skipped)`), not the turn. Same scenario after the fix: no gap over 0.3 s between
 the answer and the box.
+
+**Tokens per turn in the footer** (`23.4k in / 1.2k out`). Summed from Ollama's
+`prompt_eval_count` and `eval_count` on the last line of every reply in the turn: the agent's
+replies, subagents, compaction summaries and the review. "In" is the whole prompt each time, as
+Ollama reports it even when cached, so a turn with three tool calls counts the history about four
+times. "Out" includes reasoning: "Say hi in two words" was 637 out.
 
 **`grep` / `glob`** (`tools.py`). Pure Python, read-only (no prompts), skipping `.git`, `.venv`,
 `node_modules`, caches and binary files, and never following a symlink out of `WORKDIR`. Tool

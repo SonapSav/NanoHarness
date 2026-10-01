@@ -5,7 +5,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import banner, config, context, sandbox, session, tools, tui, ui
+from . import banner, client, config, context, sandbox, session, tools, tui, ui
 from .agent import Agent
 from .client import ModelError
 from .permissions import Permissions
@@ -142,13 +142,15 @@ def step(agent, printer, live, args, user_input):
         printer.reset()
     if live:
         live.set_busy(True)
-    started = time.monotonic()
+    started, used = time.monotonic(), dict(client.USAGE)
     try:
         try:
             answer = agent.turn(user_input)
         finally:
             # The whole turn, failed or interrupted ones too: model, tools, prompts, review.
             agent.last_turn_ms = round((time.monotonic() - started) * 1000)
+            # Every model call of the turn: replies, subagents, summaries, the review.
+            agent.last_turn_tokens = (client.USAGE["in"] - used["in"], client.USAGE["out"] - used["out"])
             if printer:
                 printer.stop()
             if live:
@@ -411,7 +413,17 @@ def footer(agent):
     used = context.estimate_tokens(agent.messages)
     text = f"{short_path(config.WORKDIR, 32)} · {config.MODEL} · ctx {100 * used // config.NUM_CTX}%"
     last = getattr(agent, "last_turn_ms", None)
-    return text + (f" · {last:,} ms" if last is not None else "")
+    if last is not None:
+        text += f" · {last:,} ms"
+    tokens = getattr(agent, "last_turn_tokens", None)
+    if tokens:
+        text += f" · {compact(tokens[0])} in / {compact(tokens[1])} out"
+    return text
+
+
+def compact(n):
+    """12345 -> 12.3k: footer room is short."""
+    return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
 
 
 def input_history():
