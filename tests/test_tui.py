@@ -292,3 +292,9 @@ def test_footer_never_overflows_a_narrow_terminal():
         u, _ = live(width=width)
         u.footer = "~/Development/some-project · aeroadvisor-agent:latest · ctx 3%"
         assert len(bare(u.region())[-1]) <= width - 1
+
+
+def test_footer_is_amber():
+    u, _ = live()
+    u.footer = "~/p · model · ctx 1%"
+    assert u.region()[-1].startswith(tui.ORANGE)

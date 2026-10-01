@@ -604,7 +604,7 @@ class LiveUI(RichUI):
             hint = ""                                # the hints give way first, then the left
             left = left if visible(left) < width else left[:width - 2] + "…"
         gap = max(2, width - visible(left) - len(hint) - 1) if hint else 0
-        return f"{GREY}{left}{' ' * gap}{hint}{RESET}"
+        return f"{ORANGE}{left}{' ' * gap}{hint}{RESET}"     # amber, like the panel's border
 
     # --- keys ----------------------------------------------------------------------------
 
