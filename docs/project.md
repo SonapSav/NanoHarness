@@ -133,6 +133,13 @@ replies, subagents, compaction summaries and the review. "In" is the whole promp
 Ollama reports it even when cached, so a turn with three tool calls counts the history about four
 times. "Out" includes reasoning: "Say hi in two words" was 637 out.
 
+**Expanding a cut-short result** (from a `/note`: "the lines are truncated (+9 lines) but I don't
+have the means to see them"; the model's answer hadn't repeated the output). A result cut short
+now says `… +9 lines (ctrl+o to expand)`; Ctrl+O (or `/expand`) prints that result in full into the
+scrollback, during a turn too. Covers `bash` output, other multi-line results and diffs past their
+20 lines. Only the latest; stepping back through earlier ones if that turns out to be needed. In
+plain output, which shows no results, `/expand` prints the last tool result from the history.
+
 **`grep` / `glob`** (`tools.py`). Pure Python, read-only (no prompts), skipping `.git`, `.venv`,
 `node_modules`, caches and binary files, and never following a symlink out of `WORKDIR`. Tool
 descriptions steer the model to them: in live runs, content searches went through `grep` 4/4 and
@@ -747,7 +754,8 @@ Recommended or noticed while adding `--hosts`, not done yet:
 - **Wide characters** (CJK, most emoji) in the input box count as one column, so the box's right
   edge can shift on lines that contain them.
 - **Not tried in tmux or a non-Linux terminal** (Windows has no `termios`: it falls back to phase 1).
-- **Phase 3:** `/` command completion; expanding a folded result or the reasoning on demand.
+- **Phase 3:** `/` command completion; expanding the folded reasoning on demand; Ctrl+O stepping
+  back through earlier cut-short results (it expands the latest; done, see What was built).
 - **A review that runs to its `num_predict` cap still takes minutes** (seen in 1 of 59 live
   reviews; the longest inputs). It is visible and skippable now, but not shorter. Option: a
   smaller cap for the review call only, measured with the replay (a cut-off gives no verdict).

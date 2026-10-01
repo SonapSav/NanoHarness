@@ -200,3 +200,11 @@ def test_a_turn_records_every_model_call_it_made(monkeypatch):
     monkeypatch.setattr(client, "chat", model)
     agent = cli.step(cli.Agent(session=cli.Session()), None, None, cli.parse_args([]), "hello")
     assert agent.last_turn_tokens == (1000, 10)
+
+
+def test_expand_in_plain_mode_prints_the_last_tool_result(run):
+    out = run(["do it", "/expand"],
+              {"role": "assistant", "content": "", "tool_calls": [
+                  {"function": {"name": "bash", "arguments": {"command": "seq 1 12"}}}]},
+              {"role": "assistant", "content": "done"})
+    assert "exit code: 0" in out and "\n12\n" in out

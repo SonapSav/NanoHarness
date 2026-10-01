@@ -130,6 +130,13 @@ def step(agent, printer, live, args, user_input):
     if user_input == "/note" or user_input.startswith("/note "):
         print(note(agent, user_input[len("/note"):].strip()))
         return agent
+    if user_input == "/expand":
+        if hasattr(printer, "expand"):
+            printer.expand()
+        else:   # plain output shows no results at all: give the last one
+            last = next((m["content"] for m in reversed(agent.messages) if m["role"] == "tool"), None)
+            print(last if last is not None else "(no tool result yet)")
+        return agent
     if user_input == "/help":
         print(HELP + ("\n" + KEYS_HELP if live else ""))
         return agent
@@ -304,6 +311,7 @@ COMMANDS = [
     ("/resume [n|id]", "switch to one (no argument: pick from a list)"),
     ("/reset", "start a new session (the old one stays saved)"),
     ("/note <text>", "keep a remark about this session (for fixing things later)"),
+    ("/expand", "the last result shown cut short, in full (also Ctrl+O)"),
     ("/messages", "the raw history, as sent to the model"),
     ("/exit", "quit (also Ctrl+D)"),
 ]
@@ -314,6 +322,7 @@ KEYS_HELP = """\
   Enter              send; during a turn, queue it for after
   Alt+Enter, Ctrl+J  new line (pasted text keeps its lines)
   ↑ / ↓              move between lines, or through earlier input
+  Ctrl+O             the last result shown cut short, in full
   Esc, Ctrl+C        interrupt a turn
   Ctrl+C             otherwise: clear the box; twice on an empty box: exit
   In menus           ↑/↓ and Enter, or the letter; Esc for no

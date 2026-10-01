@@ -333,3 +333,29 @@ def test_spinner_shows_while_the_reviewer_checks():
     assert "Checking the changes… 3s · esc to skip" in u.status_text(u.running[-1][1] + 3.2)
     u.review(False, "OK")
     assert u.status_text() is None and not u.running
+
+
+WEATHER = ("exit code: 0\n\nFetching weather for Abu Dhabi...\n" +
+           "\n".join(f"line {i}" for i in range(1, 13)))
+
+
+def test_a_cut_short_result_says_how_to_expand_and_ctrl_o_shows_it_all():
+    """From a /note: '(+9 lines) but I don't have the means to see them'."""
+    u, out = live()
+    u.terminal = None
+    u.tool_call("bash", {"command": "python3 get_weather.py"})
+    u.tool_result("bash", {"command": "python3 get_weather.py"}, WEATHER)
+    assert "… +9 lines (ctrl+o to expand)" in screen(out.getvalue())
+    assert "line 12" not in screen(out.getvalue())
+    u.handle_key(Key("ctrl-o"))
+    shown = screen(out.getvalue())
+    assert "Bash(python3 get_weather.py), in full:" in shown and "line 12" in shown
+
+
+def test_nothing_to_expand_after_a_short_result():
+    u, out = make()
+    u.tool_call("bash", {"command": "ls"})
+    u.tool_result("bash", {"command": "ls"}, "exit code: 0\n\na.py")
+    assert "ctrl+o" not in screen(out.getvalue())
+    u.expand()
+    assert "nothing cut short to expand" in screen(out.getvalue())

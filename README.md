@@ -42,6 +42,7 @@ key hints):
 | Enter | send (during a turn: queue it for when the turn ends) |
 | Alt+Enter, Ctrl+J | new line; pasted text keeps its lines and goes as one message |
 | ↑ / ↓ | move between lines; on the first/last line, earlier input (kept across runs) |
+| Ctrl+O | the last result shown cut short (`… +9 lines`), in full; also `/expand` |
 | Esc, Ctrl+C | during a turn: interrupt it |
 | Ctrl+C | otherwise: clear the box; twice on an empty box: exit |
 | Ctrl+D | exit (empty box) |

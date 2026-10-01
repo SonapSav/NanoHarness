@@ -26,6 +26,7 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 RESULT_LINES = 4        # output lines shown under a tool call
 REVIEW = "\0review"     # in `running` while the reviewer checks a turn's changes
+EXPAND = " (ctrl+o to expand)"   # on a fold line: the full text is kept, see RichUI.expand
 DIFF_LINES = 20         # diff lines shown under an edit
 QUIET = 1.0             # seconds without output before the spinner appears
 
@@ -159,13 +160,13 @@ def summary(name, result):
         if len(body) <= RESULT_LINES + 1:     # "+1 lines" takes as much room as the line
             shown = body
         else:
-            shown = body[:RESULT_LINES] + [f"{GREY}… +{len(body) - RESULT_LINES} lines{RESET}"]
+            shown = body[:RESULT_LINES] + [f"{GREY}… +{len(body) - RESULT_LINES} lines{EXPAND}{RESET}"]
         if code.strip() != "exit code: 0":
             shown.insert(0, f"{RED}{code.strip()}{RESET}")
         return shown
     if name == "task":
         return ["Done" + (f": {lines[0][:150]}" if lines[0] else "")]
-    return [lines[0][:200]] + ([f"{GREY}… +{len(lines) - 1} lines{RESET}"] if len(lines) > 1 else [])
+    return [lines[0][:200]] + ([f"{GREY}… +{len(lines) - 1} lines{EXPAND}{RESET}"] if len(lines) > 1 else [])
 
 
 class RichUI(ui.PlainUI):
@@ -178,6 +179,7 @@ class RichUI(ui.PlainUI):
         self.live = ""          # what is on the bottom line right now (redrawn in place)
         self.running = []       # tool calls in progress, innermost last
         self.diffs = {}         # depth -> diff of the edit in flight, until shown
+        self.folded = None      # (title, lines) of the last result shown cut short
         self.reset()
         if self.out.isatty() if ticker is None else ticker:
             threading.Thread(target=self._tick, daemon=True).start()
@@ -266,12 +268,16 @@ class RichUI(ui.PlainUI):
                     self._commit(f"{GREY}  ⎿      {RESET}{RED}{str(result).splitlines()[0][:150]}{RESET}")
                 return
             lines = summary(name, result)
+            if any(EXPAND in l for l in lines):     # cut short: keep it all for ctrl+o
+                text = str(result).split("\n\n[You already made this exact call", 1)[0]
+                self.folded = (title(name, args), text.rstrip().splitlines())
             diff = self.diffs.pop(depth, None)
             if diff and not str(result).startswith("Error"):
-                shown = [l[4:] if l.startswith("    ") else l for l in diff][:DIFF_LINES]
-                lines += render_diff(shown, self.width() - 1 - 5)   # 5: the indent below
+                full = [l[4:] if l.startswith("    ") else l for l in diff]
+                lines += render_diff(full[:DIFF_LINES], self.width() - 1 - 5)   # 5: the indent below
                 if len(diff) > DIFF_LINES:
-                    lines.append(f"{GREY}… +{len(diff) - DIFF_LINES} diff lines{RESET}")
+                    lines.append(f"{GREY}… +{len(diff) - DIFF_LINES} diff lines{EXPAND}{RESET}")
+                    self.folded = (title(name, args), render_diff(full, self.width() - 1 - 5))
             for i, line in enumerate(lines):
                 self._commit(("  ⎿  " if i == 0 else "     ") + line)
             self._draw("")
@@ -297,6 +303,17 @@ class RichUI(ui.PlainUI):
             with self.lock:
                 self.running = paused
                 self.quiet_since = time.monotonic()
+
+    def expand(self):
+        """Ctrl+O and /expand: the last result that was cut short, in full, into scrollback."""
+        with self.lock:
+            if not self.folded:
+                self._commit(f"{GREY}  (nothing cut short to expand){RESET}")
+                return
+            heading, lines = self.folded
+            self._commit(f"{GREY}  ⎿  {heading}, in full:{RESET}")
+            for line in lines:
+                self._commit("     " + line)
 
     def review_start(self):
         with self.lock:
@@ -719,6 +736,9 @@ class LiveUI(RichUI):
                 return
             if key.name == "ctrl-l":
                 self._render()
+                return
+            if key.name == "ctrl-o":         # works during a turn too
+                self.expand()
                 return
             if self.editor.key(key) == "submit":
                 text = self.editor.text

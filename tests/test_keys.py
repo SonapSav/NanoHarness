@@ -78,3 +78,7 @@ def test_menu_arrows_shortcuts_and_cancel():
     assert m.key(Key("up")) is None and m.key(Key("up")) is None and m.index == 2   # wraps
     assert m.key(Key("enter")) == 2
     assert m.key(Key("char", "A")) == 1 and m.key(Key("esc")) == 2 and m.key(Key("char", "1")) == 0
+
+
+def test_ctrl_o_is_a_key():
+    assert names(KeyParser().feed(b"\x0f")) == ["ctrl-o"]

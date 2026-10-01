@@ -23,7 +23,7 @@ CONTROL = {
     "\x7f": "backspace", "\x08": "backspace", "\t": "tab",
     "\x01": "home", "\x05": "end", "\x02": "left", "\x06": "right",
     "\x04": "ctrl-d", "\x03": "ctrl-c", "\x15": "ctrl-u", "\x0b": "ctrl-k",
-    "\x17": "word-backspace", "\x0c": "ctrl-l",
+    "\x17": "word-backspace", "\x0c": "ctrl-l", "\x0f": "ctrl-o",
 }
 
 
