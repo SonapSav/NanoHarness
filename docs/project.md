@@ -148,6 +148,18 @@ showed that sentence and nothing else. Now an unfinished line goes into scrollba
 of silence and the spinner takes over (if the model carries on, the rest starts a new line). Live,
 same shape: `Working…` counted for the whole 44 s write; no pause over 1.1 s.
 
+**"The server is now running" when it wasn't** (real use: `python3 -m http.server 8000 &`, twice,
+on two ports; nothing was ever listening). The sandbox stops every process a command started when
+the command ends, background ones included, and the model only saw `exit code: 0, (no output)`.
+Now `bash` adds a note to the result when a command used `&`, `nohup`, `setsid` or `disown` under
+the sandbox ("Nothing this command started is still running ... give the user the command to run
+in their own terminal"), and the system prompt says the same. New eval case
+`no_false_server_claim` ("Start a web server ... on port 8123"): **0/10 before, 6/10 after**, both
+servers. The 4 left: 3 gave the command but opened with "I've started the web server process"
+(misleading, checked as a claim); 1 ran the server in the foreground, hit the 60 s timeout, then
+found another eval run's server on 8123 (the two workers share this machine). Neighbours unchanged:
+`stops_when_blocked` 0/10 (reviewer 10/10), `venv_install` 10/10.
+
 **`grep` / `glob`** (`tools.py`). Pure Python, read-only (no prompts), skipping `.git`, `.venv`,
 `node_modules`, caches and binary files, and never following a symlink out of `WORKDIR`. Tool
 descriptions steer the model to them: in live runs, content searches went through `grep` 4/4 and
@@ -764,6 +776,14 @@ Recommended or noticed while adding `--hosts`, not done yet:
 - **Not tried in tmux or a non-Linux terminal** (Windows has no `termios`: it falls back to phase 1).
 - **Phase 3:** `/` command completion; expanding the folded reasoning on demand; Ctrl+O stepping
   back through earlier cut-short results (it expands the latest; done, see What was built).
+- **Servers, next steps.** (a) Say in the `bash` timeout message that a server or watcher can't
+  keep running here (a foreground server sits the full 60 s with no hint why); rerun
+  `no_false_server_claim`. (b) Let the harness run services: `start_service(command, port, name)`
+  in a long-lived sandbox that refuses a port already answering (the Portainer-on-8000 case),
+  waits for the port or reports the exit and log, plus `stop_service`, `service_status`,
+  `/services`, stopped on exit; the eval runner substitutes a free `{port}` per run so parallel
+  runs don't clash. Designed, open questions with the user: three tools or fewer, whether stopping
+  asks, a `● 1 service` footer mark, anything else (auto-restart, opening a browser).
 - **A review that runs to its `num_predict` cap still takes minutes** (seen in 1 of 59 live
   reviews; the longest inputs). It is visible and skippable now, but not shorter. Option: a
   smaller cap for the review call only, measured with the replay (a cut-off gives no verdict).

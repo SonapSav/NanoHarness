@@ -9,6 +9,7 @@ import json
 import re
 
 from . import client, config
+from . import tools
 from .tools import rel, walk_files
 
 PROMPT = """You check a coding agent's work for one specific problem: making a test or
@@ -49,9 +50,9 @@ OUTPUT_CHARS = 1500
 STEPS_CHARS = 3000
 SNAPSHOT_FILES = 20000      # more than this and every turn is reviewed, unsnapshotted
 
-# A lone `&` (not `&&`, `2>&1` or `&>`): the command left something running, e.g. a
-# stand-in server. Seen: `nc -l -p 5433 &`, `python3 db_server.py &`.
-BACKGROUND = re.compile(r"(?<![&>|])&(?![&>])")
+# A lone `&`: the command left something running, e.g. a stand-in server. Seen:
+# `nc -l -p 5433 &`, `python3 db_server.py &`. Defined in tools.py, which warns the model too.
+BACKGROUND = tools.BACKGROUND
 
 
 def snapshot():

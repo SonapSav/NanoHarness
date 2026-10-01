@@ -245,7 +245,25 @@ def bash(command):
         raise
 
     out = (stdout + stderr).strip() or "(no output)"
-    return truncate(f"exit code: {proc.returncode}\n\n{out}")
+    note = BACKGROUND_NOTE if sandboxed and starts_background(command) else ""
+    return truncate(f"exit code: {proc.returncode}\n\n{out}") + note
+
+
+# A lone `&` (not `&&`, `2>&1` or `&>`): the command leaves something running. The reviewer
+# uses it too (a stand-in server is a fake); here it is a warning to the model.
+BACKGROUND = re.compile(r"(?<![&>|])&(?![&>])")
+DETACH = re.compile(r"\b(nohup|setsid|disown)\b")
+# Seen in real use: `python3 -m http.server 8000 &` gave "exit code: 0, (no output)", the sandbox
+# stopped the server when the command ended, and the model said it was running (0/10 in
+# the no_false_server_claim eval case).
+BACKGROUND_NOTE = ("\n\n[Nothing this command started is still running: the sandbox stops every "
+                   "process a command starts when the command ends, background ones (&, nohup) "
+                   "included. Do not tell the user it is running. To run a server or watcher, "
+                   "give the user the command to run in their own terminal.]")
+
+
+def starts_background(command):
+    return bool(BACKGROUND.search(command) or DETACH.search(command))
 
 
 def kill_group(proc):

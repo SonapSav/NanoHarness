@@ -83,7 +83,9 @@ Rules:
 - bash runs in a sandbox: anything installed outside the working directory is gone
   after the command. To install Python packages, first create a venv in the working
   directory (python3 -m venv .venv), then use .venv/bin/pip and .venv/bin/python.
-  Never pip install --user or apt install; they cannot work here.
+  Never pip install --user or apt install; they cannot work here. Nothing a command starts
+  keeps running after it returns, background (&, nohup) included: never tell the user a
+  server is running. To run one, give the user the command to run in their own terminal.
 - To answer a question about how the code works, if it would take reading more than
   two files, call task instead of reading them yourself. Your context is small; the
   subagent's report is short.

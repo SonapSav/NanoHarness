@@ -298,3 +298,15 @@ def test_bash_commands_get_no_terminal_input(agent):
     """A command that reads stdin must not wait on (or steal from) the user's terminal."""
     out = call(agent, "bash", command="read line; echo \"got:[$line] status:$?\"")
     assert "got:[] status:1" in out
+
+
+def test_a_background_command_is_told_nothing_survives(agent):
+    """Real use: a server started with & was gone when the command returned, and the model said
+    it was running."""
+    from nanoharness import sandbox
+    if not sandbox.active():
+        pytest.skip("only under the sandbox: without it, background processes do survive")
+    assert "Nothing this command started is still running" in call(agent, "bash", command="sleep 0 &")
+    assert "Nothing this command started" in call(agent, "bash", command="nohup true")
+    for plain in ("echo hi", "true && echo ok", "ls 2>&1"):
+        assert "Nothing this command started" not in call(agent, "bash", command=plain)
