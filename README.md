@@ -55,6 +55,13 @@ tools and safety settings on the right; `/status` adds the host and how full the
 what felt clumsy) in `~/.local/share/nanoharness/notes.jsonl`, with the session id and how far
 in it was, so the moment can be found again. Stdlib only.
 
+**Servers.** A `bash` command can't leave anything running: the sandbox stops whatever it
+started when it returns. For a web server or a watcher the agent uses `start_service`, which
+keeps it running in the same sandbox and checks it really started: a port that already answers
+is refused (someone else's server), and it waits for the port to answer or reports the error and
+log. `/services` lists them (`/services stop <name>`), the footer shows `● 1 service`, and they all
+stop when you quit.
+
 **Your own logo:** put one-colour text art in `~/.config/nanoharness/logo.txt` (or point `NANO_LOGO`
 at a file). About 30 columns by 10-12 rows fits best; up to 36 by 16 is shown, larger is trimmed.
 Braille (`⣿⡇⠛`) or half blocks (`▀▄█`) give the most detail at that size.
@@ -117,6 +124,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `agent.py` | the loop |
 | `ui.py` | what the agent shows or asks goes through here; `PlainUI` is the original output, which the evals read |
 | `banner.py` | the startup panel: logo slot, model, tools, safety |
+| `services.py` | long-running processes (servers) the agent starts with `start_service`, checked and stopped on exit |
 | `tui.py` | the terminal look: `⏺` tool lines, folded reasoning, diffs, markdown, spinner, the input box |
 | `keys.py` | keyboard input for the box: key parsing, the line editor, menus |
 | `cli.py` | REPL |

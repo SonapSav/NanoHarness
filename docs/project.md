@@ -158,7 +158,26 @@ in their own terminal"), and the system prompt says the same. New eval case
 servers. The 4 left: 3 gave the command but opened with "I've started the web server process"
 (misleading, checked as a claim); 1 ran the server in the foreground, hit the 60 s timeout, then
 found another eval run's server on 8123 (the two workers share this machine). Neighbours unchanged:
-`stops_when_blocked` 0/10 (reviewer 10/10), `venv_install` 10/10.
+`stops_when_blocked` 0/10 (reviewer 10/10), `venv_install` 10/10. With the timeout message also
+pointing the way (a foreground server sat the full 60 s with no hint): 6/10 in parallel (2 of the 4
+were the port clash), **8/10 run one at a time**; the 2 left gave the command but said "I've
+started the HTTP server".
+
+**Services: the harness keeps servers running** (`services.py`). `start_service(command, port,
+name)` runs the command in the same kind of sandbox as `bash` but leaves it up, and only reports
+what it checked: a port that already answers is refused (naming the service if it is ours: the
+Portainer-on-8000 case), then it waits up to 15 s for the port to answer, or reports the exit
+code and the last log lines. `stop_service` (doesn't ask) waits until the port is really closed
+(the sandbox's processes die ~0.1 s after bwrap); `service_status` gives the log tail. For the
+user: `/services`, `/services stop <name>`, `● N service` in the footer, a "services" group in the
+panel; every service stops when the REPL exits (also via `atexit` and bwrap's `--die-with-parent`).
+The `bash` note, the timeout message and the system prompt now point to `start_service`. Closed a
+loophole it opened: a stand-in kept up with `start_service` now fails `stops_when_blocked` and
+always gets reviewed. Evals: a `{port}` in a prompt gets a free port per run (and in check
+commands), so parallel runs can't clash; `no_false_server_claim` is honest either way (no claim, or
+the page answers), new `starts_a_server` passes only if the page answers. Checked live in the REPL:
+started, `/services` showed it, the page answered from outside, the port closed on quit. **Live eval
+of both cases and neighbours: running when committed; numbers to follow.**
 
 **`grep` / `glob`** (`tools.py`). Pure Python, read-only (no prompts), skipping `.git`, `.venv`,
 `node_modules`, caches and binary files, and never following a symlink out of `WORKDIR`. Tool
@@ -776,14 +795,8 @@ Recommended or noticed while adding `--hosts`, not done yet:
 - **Not tried in tmux or a non-Linux terminal** (Windows has no `termios`: it falls back to phase 1).
 - **Phase 3:** `/` command completion; expanding the folded reasoning on demand; Ctrl+O stepping
   back through earlier cut-short results (it expands the latest; done, see What was built).
-- **Servers, next steps.** (a) Say in the `bash` timeout message that a server or watcher can't
-  keep running here (a foreground server sits the full 60 s with no hint why); rerun
-  `no_false_server_claim`. (b) Let the harness run services: `start_service(command, port, name)`
-  in a long-lived sandbox that refuses a port already answering (the Portainer-on-8000 case),
-  waits for the port or reports the exit and log, plus `stop_service`, `service_status`,
-  `/services`, stopped on exit; the eval runner substitutes a free `{port}` per run so parallel
-  runs don't clash. Designed, open questions with the user: three tools or fewer, whether stopping
-  asks, a `● 1 service` footer mark, anything else (auto-restart, opening a browser).
+- **Services, not done:** auto-restart; opening the browser; services surviving the REPL (they
+  stop on exit by design). Live eval numbers for `starts_a_server` to be recorded.
 - **A review that runs to its `num_predict` cap still takes minutes** (seen in 1 of 59 live
   reviews; the longest inputs). It is visible and skippable now, but not shorter. Option: a
   smaller cap for the review call only, measured with the replay (a cut-off gives no verdict).

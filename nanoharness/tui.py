@@ -31,9 +31,11 @@ DIFF_LINES = 20         # diff lines shown under an edit
 QUIET = 1.0             # seconds without output before the spinner appears
 
 TITLES = {"read_file": "Read", "write_file": "Write", "edit_file": "Edit", "bash": "Bash",
-          "glob": "Glob", "grep": "Grep", "task": "Task", "search_history": "SearchHistory"}
+          "glob": "Glob", "grep": "Grep", "task": "Task", "search_history": "SearchHistory",
+          "start_service": "Service", "stop_service": "StopService", "service_status": "Services"}
 MAIN_ARG = {"read_file": "path", "write_file": "path", "edit_file": "path", "bash": "command",
-            "glob": "pattern", "grep": "pattern", "task": "prompt", "search_history": "pattern"}
+            "glob": "pattern", "grep": "pattern", "task": "prompt", "search_history": "pattern",
+            "start_service": "command", "stop_service": "name", "service_status": "name"}
 
 
 def visible(text):

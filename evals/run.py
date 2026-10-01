@@ -28,6 +28,7 @@ from pathlib import Path
 
 from nanoharness import config, context, tools
 from nanoharness.agent import Agent
+from nanoharness import services
 from nanoharness.client import InfraError, ModelError
 from nanoharness.permissions import Permissions
 
@@ -58,11 +59,15 @@ def run_case(case, keep=False):
     # Agent swaps in today's system prompt for the first message, so a placeholder will do.
     history = [{"role": "system", "content": ""}] + case.history if case.history else None
     agent = Agent(Permissions(yolo=case.approve == "all"), messages=history)
+    # A "{port}" in the prompt gets a port free right now, so parallel runs on this machine
+    # never ask for the same one (seen: one run found another run's server on 8123).
+    port = free_port() if "{port}" in case.prompt else None
+    prompt = case.prompt.replace("{port}", str(port))
     out, error, answer, infra = io.StringIO(), None, "", False
     start = time.monotonic()
     try:
         with redirect_stdout(out):
-            answer = agent.turn(case.prompt)
+            answer = agent.turn(prompt)
     except ModelError as e:
         error = str(e)
         infra = isinstance(e, InfraError)   # a stall says nothing about the model
@@ -80,10 +85,11 @@ def run_case(case, keep=False):
     plain = re.sub(r"\x1b\[[0-9;]*m", "", out.getvalue())
     sub_counts = Counter(line.split("↳", 1)[1].strip()
                          for line in plain.splitlines() if "↳" in line)
-    run = Run(workdir, agent.messages, answer, tool_counts, prompts)
+    run = Run(workdir, agent.messages, answer, tool_counts, prompts, port)
     try:
         results = [check(run) for check in case.checks]   # command checks need WORKDIR
     finally:
+        services.stop_all()          # checks have seen them; nothing outlives the run
         config.WORKDIR = saved_workdir
         if not keep:
             shutil.rmtree(workdir, ignore_errors=True)
@@ -109,6 +115,13 @@ def run_case(case, keep=False):
         "stdout": out.getvalue()[-4000:],
         "messages": agent.messages,
     }
+
+
+def free_port():
+    import socket
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
 
 def crashed(case, error):

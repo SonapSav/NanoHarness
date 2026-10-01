@@ -33,6 +33,8 @@ def test_titles_name_the_tool_and_what_it_is_about():
     assert tui.title("bash", {"command": "pytest  -q\n--tb=short"}) == "Bash(pytest -q --tb=short)"
     assert tui.title("bash", {"command": "x" * 100}).endswith("…)")
     assert tui.title("mystery", {}) == "mystery()"
+    assert tui.title("start_service", {"command": "python3 -m http.server 8069", "port": 8069}) == \
+        "Service(python3 -m http.server 8069)"
 
 
 def test_summaries():

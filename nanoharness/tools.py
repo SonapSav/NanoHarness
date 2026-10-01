@@ -238,7 +238,8 @@ def bash(command):
         kill_group(proc)
         raise ToolError(
             f"Command timed out after {config.BASH_TIMEOUT}s and was killed, "
-            "along with anything it started."
+            "along with anything it started. If it was a server or watcher, it cannot keep "
+            "running in bash: use start_service, which keeps it running."
         ) from None
     except BaseException:  # KeyboardInterrupt: the new group no longer gets the terminal's SIGINT
         kill_group(proc)
@@ -259,7 +260,7 @@ DETACH = re.compile(r"\b(nohup|setsid|disown)\b")
 BACKGROUND_NOTE = ("\n\n[Nothing this command started is still running: the sandbox stops every "
                    "process a command starts when the command ends, background ones (&, nohup) "
                    "included. Do not tell the user it is running. To run a server or watcher, "
-                   "give the user the command to run in their own terminal.]")
+                   "use start_service, which keeps it running and checks that it started.]")
 
 
 def starts_background(command):
@@ -585,3 +586,6 @@ def searchable(m) -> str:
 def task(prompt, write=False):
     from . import subagent   # lazy: subagent imports agent, which imports this module
     return truncate(subagent.run(prompt, write=bool(write)))
+
+
+from . import services   # noqa: E402,F401 -- registers start_service, stop_service, service_status

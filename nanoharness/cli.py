@@ -5,7 +5,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import banner, client, config, context, sandbox, session, tools, tui, ui
+from . import banner, client, config, context, sandbox, services, session, tools, tui, ui
 from .agent import Agent
 from .client import ModelError
 from .permissions import Permissions
@@ -84,9 +84,12 @@ def main(argv=None):
     if live:
         live.footer = footer(agent)
         live.set_busy(False)        # redraw with the footer filled in
+    import atexit
+    atexit.register(services.stop_all)       # also on a crash: nothing outlives the harness
     try:
         return repl(agent, printer, live, args)
     finally:
+        services.stop_all()
         if live:
             live.close()
             save_live_history(live)
@@ -129,6 +132,16 @@ def step(agent, printer, live, args, user_input):
         return agent
     if user_input == "/note" or user_input.startswith("/note "):
         print(note(agent, user_input[len("/note"):].strip()))
+        return agent
+    if user_input == "/services" or user_input.startswith("/services "):
+        parts = user_input.split()
+        if len(parts) == 3 and parts[1] == "stop":
+            try:
+                print(services.stop(parts[2]))
+            except tools.ToolError as e:
+                print(f"\033[31m{e}\033[0m")
+        else:
+            print(services.status())
         return agent
     if user_input == "/expand":
         if hasattr(printer, "expand"):
@@ -273,7 +286,8 @@ class StreamPrinter:
 
 TOOL_GROUPS = {"read_file": "files", "write_file": "files", "edit_file": "files",
                "glob": "search", "grep": "search", "search_history": "search",
-               "bash": "shell", "task": "delegation"}
+               "bash": "shell", "task": "delegation", "start_service": "services",
+               "stop_service": "services", "service_status": "services"}
 
 
 def rich_banner(session_id, yolo, columns=None):
@@ -291,7 +305,7 @@ def rich_banner(session_id, yolo, columns=None):
     groups = {}
     for name in tools.REGISTRY:
         groups.setdefault(TOOL_GROUPS.get(name, "other"), []).append(name)
-    order = ["files", "search", "shell", "delegation", "other"]
+    order = ["files", "search", "shell", "services", "delegation", "other"]
     tool_rows = [(g, ", ".join(groups[g])) for g in order if g in groups]
     box = sandbox.status()
     safety = [("sandbox", box.removeprefix("bwrap: ") if box.startswith("bwrap:") else "!" + box),
@@ -311,6 +325,7 @@ COMMANDS = [
     ("/resume [n|id]", "switch to one (no argument: pick from a list)"),
     ("/reset", "start a new session (the old one stays saved)"),
     ("/note <text>", "keep a remark about this session (for fixing things later)"),
+    ("/services", "servers the agent started; /services stop <name>"),
     ("/expand", "the last result shown cut short, in full (also Ctrl+O)"),
     ("/messages", "the raw history, as sent to the model"),
     ("/exit", "quit (also Ctrl+D)"),
@@ -421,6 +436,9 @@ def footer(agent):
     """The footer's left side: where, which model, how full the context is."""
     used = context.estimate_tokens(agent.messages)
     text = f"{short_path(config.WORKDIR, 32)} · {config.MODEL} · ctx {100 * used // config.NUM_CTX}%"
+    up = services.running()
+    if up:   # easy to forget a server is still holding a port
+        text += f" · ● {len(up)} service" + ("s" if len(up) > 1 else "")
     last = getattr(agent, "last_turn_ms", None)
     if last is not None:
         text += f" · {last:,} ms"

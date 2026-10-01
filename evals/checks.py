@@ -18,6 +18,7 @@ class Run:
     answer: str
     tools: Counter = field(default_factory=Counter)   # main-agent tool calls by name
     prompts: list = field(default_factory=list)       # permission prompts shown
+    port: int = None                                  # the free port put into a "{port}" prompt
 
     def commands(self):
         """Every bash command the main agent ran."""
@@ -128,7 +129,7 @@ def command_output(command, expected=None, name=None):
     exit 0 and, if given, exactly `expected` on stdout+stderr."""
     def fn(r):
         from nanoharness import tools    # config.WORKDIR is still this run's workdir
-        out = tools.bash(command)
+        out = tools.bash(command.replace("{port}", str(r.port)))
         head, _, body = out.partition("\n\n")
         if head != "exit code: 0":
             return False, short(out, 300)

@@ -76,6 +76,8 @@ class Agent:
             if name == "bash":
                 self.last_command = f"$ {args.get('command', '')}\n{result}"
                 self.commands.append(str(args.get("command", "")))
+            if name == "start_service":   # left running on purpose: the reviewer must look
+                self.commands.append(f"{args.get('command', '')} &")
             return result
         except Denied as e:
             return f"Error: {e}"

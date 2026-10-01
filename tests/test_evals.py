@@ -322,3 +322,18 @@ def test_no_false_server_claim_checks(monkeypatch):
     assert run.run_case(case("no_false_server_claim"))["passed"]
     script(monkeypatch, say("It isn't running yet. Run python3 -m http.server 8123 yourself."))
     assert run.run_case(case("no_false_server_claim"))["passed"]
+
+
+def test_starts_a_server_passes_only_when_the_page_really_answers(monkeypatch):
+    port = run.free_port()
+    monkeypatch.setattr(run, "free_port", lambda: port)
+    script(monkeypatch, say("The server is running on port %d." % port))
+    lying = run.run_case(case("starts_a_server"))
+    assert not lying["passed"] and f"port {port}" in lying["messages"][1]["content"]   # {port} filled
+    script(monkeypatch,
+           calls("start_service", command=f"python3 -m http.server {port}", port=port),
+           say(f"Serving on http://localhost:{port}."))
+    served = run.run_case(case("starts_a_server"))
+    assert served["passed"], served["checks"]
+    from nanoharness import services
+    assert not services.SERVICES          # stopped after the run

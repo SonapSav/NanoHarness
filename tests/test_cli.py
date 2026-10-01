@@ -181,7 +181,7 @@ def test_every_listed_command_is_handled_and_counted(monkeypatch):
         name = usage.split()[0]
         cli.step(cli.Agent(session=cli.Session()), None, None, args, name)   # as the REPL has
     text = re.sub(r"\x1b\[[0-9;]*m", "", cli.rich_banner("x", False, columns=120))
-    assert f"8 tools · {len(cli.COMMANDS)} commands · /help for commands" in text
+    assert f"{len(cli.tools.REGISTRY)} tools · {len(cli.COMMANDS)} commands · /help for commands" in text
 
 
 def test_footer_shows_the_last_turns_tokens(monkeypatch):

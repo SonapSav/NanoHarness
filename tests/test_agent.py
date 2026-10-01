@@ -205,3 +205,14 @@ def test_interrupting_the_review_skips_it_and_keeps_the_turn(agent, monkeypatch,
            reply("Done."), KeyboardInterrupt())
     assert agent.turn("write a.txt") == "Done."
     assert agent.verdict is None and "review skipped" in capsys.readouterr().out
+
+
+def test_a_turn_that_started_a_service_is_reviewed(agent, monkeypatch):
+    """A stand-in kept up by start_service is as much a fake as one started with &."""
+    monkeypatch.setattr(config, "REVIEW", True)
+    from nanoharness import services
+    monkeypatch.setattr(services, "start", lambda *a, **k: "Started service 'db'.")
+    script(monkeypatch, reply("", tool_call("start_service", command="nc -l 5433", port=5433)),
+           reply("Tests pass."), {"role": "assistant", "content": "FAKED: a stand-in database."})
+    agent.turn("get the tests passing")
+    assert agent.verdict == (True, "a stand-in database.")
