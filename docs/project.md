@@ -308,9 +308,15 @@ Recommended or noticed while adding `--hosts`, not done yet:
   or after a paste, not one inside it. Making that case pass needs the summarizer to see more than
   a fixed slice of each message (e.g. sending long messages to it in chunks), which costs model calls.
   Worth it only if it turns up in use.
-- **Make the summary prompt say what to keep.** Ask explicitly for user instructions, constraints and
-  decisions (the latest one where they changed) and to skip log contents. The model already kept the
-  latest port 10/10; the log quoting is the waste to cut.
+- ~~**Make the summary prompt say what to keep.**~~ Measured first, not needed. The compaction
+  evals sit at the ceiling, so `evals/summary_bench.py` scores summaries directly: it calls
+  `context.summarize` on exactly what `fit()` hands it for the two prepared histories and checks
+  each summary for the facts the session set and for quoted log lines (~5 min, no agent runs).
+  Current prompt, 10 summaries per history, both servers: ground rules (`legacy/` read-only,
+  `app.py` untouched) 20/20, latest port 9310 20/20, probe path 10/10 where the history has it
+  (0/10 in the `lost` one, as it should be), 0.6 and 0.0 quoted log lines per summary, ~140
+  words. The log quoting this item was about came from the old head-only cut, fixed by `clip()`.
+  Prompt left as it is; rerun the bench (`--label <name>`) before changing the prompt or the cut.
 - **A multi-turn version of the case**, with each earlier turn sent live, so compaction happens in
   stages as it would in a real session. Slower (several live turns per run), but tests summaries of
   summaries.
