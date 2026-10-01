@@ -1,4 +1,6 @@
 """Offline tests for the REPL: scripted input, scripted model."""
+import re
+
 import pytest
 
 from nanoharness import cli, client, config
@@ -119,3 +121,12 @@ def test_rich_banner_is_short():
     banner = cli.rich_banner("20261001-000000", yolo=False)
     assert config.MODEL in banner and "20261001-000000" in banner and "/status" in banner
     assert config.OLLAMA_HOST not in banner and "sandbox" not in banner and "startup" not in banner
+
+
+def test_rich_banner_fits_a_narrow_terminal(monkeypatch, tmp_path):
+    deep = tmp_path / ("very-long-directory-name-" * 4) / "project"
+    monkeypatch.setattr(config, "WORKDIR", deep)
+    lines = [re.sub(r"\x1b\[[0-9;]*m", "", l) for l in cli.rich_banner("x", False, columns=60).split("\n")]
+    box = lines[:lines.index(next(l for l in lines if l.startswith("╰"))) + 1]
+    assert all(len(l) <= 60 for l in box)
+    assert any("…" in l and l.rstrip(" │").endswith("/project") for l in lines)

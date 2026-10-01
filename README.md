@@ -33,8 +33,20 @@ nanoharness --plain      # the plain line-by-line output (the default when not i
 In a terminal the output looks like Claude Code's or Pi's, inline so it stays in the
 terminal's scrollback: the model's reasoning folds to `✻ Thought for 4s`, each tool call is a
 `⏺ Write(weather.py)` line with a short `⎿` result (edits as a coloured diff), answers get light
-markdown, and a spinner with a timer shows whenever the model or a tool is busy. ↑/↓ recall
-earlier input across runs. The banner is kept short (model, directory, session); `/status` shows
+markdown, and a spinner with a timer shows whenever the model or a tool is busy. Input is a box
+that stays at the bottom while the conversation scrolls above it, with a footer (model, context
+used, key hints):
+
+| key | does |
+|---|---|
+| Enter | send (during a turn: queue it for when the turn ends) |
+| Alt+Enter, Ctrl+J | new line; pasted text keeps its lines and goes as one message |
+| ↑ / ↓ | move between lines; on the first/last line, earlier input (kept across runs) |
+| Esc, Ctrl+C | during a turn: interrupt it |
+| Ctrl+C | otherwise: clear the box; twice on an empty box: exit |
+| Ctrl+D | exit (empty box) |
+
+Permission prompts and the `/resume` picker are menus: ↑/↓ and Enter, or `y`/`a`/`n`, Esc for no. The banner is kept short (model, directory, session); `/status` shows
 the rest: host, how full the context is, sandbox, reviewer and permission settings. Stdlib only.
 
 Every conversation is saved after each message to `~/.local/share/nanoharness/sessions/`
@@ -94,7 +106,8 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `review.py` | optional second look after a turn that wrote: does the change fake a pass? (on by default, `NANO_REVIEW=0` to skip) |
 | `agent.py` | the loop |
 | `ui.py` | what the agent shows or asks goes through here; `PlainUI` is the original output, which the evals read |
-| `tui.py` | the terminal look: `⏺` tool lines, folded reasoning, diffs, markdown, spinner |
+| `tui.py` | the terminal look: `⏺` tool lines, folded reasoning, diffs, markdown, spinner, the input box |
+| `keys.py` | keyboard input for the box: key parsing, the line editor, menus |
 | `cli.py` | REPL |
 | `evals/` | live-model eval cases and runner (`python -m evals`); `python -m evals.review_replay` runs `review.py` over recorded runs |
 | `docs/project.md` | status against the original plan, and what's pending |

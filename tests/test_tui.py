@@ -133,3 +133,155 @@ def test_spinner_labels():
     assert "Running Bash… 4s" in u.status_text(u.running[-1][1] + 4.1)
     u.tool_result("bash", {"command": "sleep 5"}, "exit code: 0\n\n")
     assert u.status_text() is None
+
+
+# --- phase 2: LiveUI ------------------------------------------------------------------
+
+import threading
+
+from nanoharness.keys import Key
+
+
+def live(width=50):
+    out = io.StringIO()
+    return tui.LiveUI(out=out, width=width, ticker=False, history=[]), out
+
+
+def bare(lines):
+    return [re.sub(r"\x1b\[[0-9;]*m", "", l) for l in lines]
+
+
+def typed(u, text):
+    for ch in text:
+        u.handle_key(Key("char", ch))
+
+
+def in_thread(fn):
+    box = {}
+    t = threading.Thread(target=lambda: box.setdefault("v", _call(fn)))
+    t.start()
+    return t, box
+
+
+def _call(fn):
+    try:
+        return fn()
+    except BaseException as e:
+        return e
+
+
+def test_box_and_footer_fit_the_width_and_show_the_cursor():
+    u, _ = live()
+    u.footer = "model · ctx 3%"
+    typed(u, "hello")
+    lines = bare(u.region())
+    assert lines[0].startswith("╭") and lines[-2].startswith("╰")
+    assert all(len(l) <= 49 for l in lines)
+    assert lines[1].startswith("│ > hello") and lines[1].endswith("│")
+    assert "\x1b[7m" in u.region()[1]                       # the drawn cursor
+    assert "model · ctx 3%" in lines[-1] and "enter send" in lines[-1]
+
+
+def test_long_and_multiline_input_wraps_inside_the_box():
+    u, _ = live(width=30)
+    typed(u, "a" * 40)
+    u.handle_key(Key("newline"))
+    typed(u, "second")
+    rows = bare(u.region())[1:-2]
+    assert len(rows) == 3 and all(len(r) == 29 for r in rows)
+    assert "second" in rows[-1]
+
+
+def test_read_line_returns_the_text_and_echoes_it_into_scrollback():
+    u, out = live()
+    u.terminal = object()                     # pretend started, so commits render
+    u.terminal = None
+    t, box = in_thread(u.read_line)
+    typed(u, "fix it")
+    u.handle_key(Key("enter"))
+    t.join(2)
+    assert box["v"] == "fix it" and "> fix it" in screen(out.getvalue())
+    assert u.editor.history == ["fix it"]
+
+
+def test_ctrl_c_clears_then_twice_on_empty_exits_and_ctrl_d_exits():
+    u, _ = live()
+    t, box = in_thread(u.read_line)
+    typed(u, "oops")
+    u.handle_key(Key("ctrl-c"))
+    assert u.editor.text == "" and t.is_alive()
+    u.handle_key(Key("ctrl-c"))
+    assert "again to exit" in bare(u.region())[-1]
+    u.handle_key(Key("ctrl-c"))
+    t.join(2)
+    assert isinstance(box["v"], EOFError)
+    t, box = in_thread(u.read_line)
+    u.handle_key(Key("ctrl-d"))
+    t.join(2)
+    assert isinstance(box["v"], EOFError)
+
+
+def test_enter_during_a_turn_queues_and_esc_interrupts(monkeypatch):
+    u, _ = live()
+    killed = []
+    monkeypatch.setattr("os.kill", lambda pid, sig: killed.append(sig))
+    u.set_busy(True)
+    typed(u, "next one")
+    u.handle_key(Key("enter"))
+    assert u.queued == ["next one"] and "1 queued" in bare(u.region())[-1]
+    u.handle_key(Key("esc"))
+    import signal
+    assert killed == [signal.SIGINT]
+    u.set_busy(False)
+    assert u.read_line() == "next one"                 # queued: no waiting
+
+
+def test_permission_is_an_arrow_key_menu(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "WORKDIR", tmp_path)
+    u, out = live()
+    args = {"command": "rm -rf build"}
+    tool = tools.REGISTRY["bash"]
+    t, box = in_thread(lambda: u.permission("", tool.preview(**args), tool, args))
+    for _ in range(50):
+        if u.menu:
+            break
+        threading.Event().wait(0.01)
+    lines = bare(u.region())
+    assert "Allow Bash(rm -rf build)?" in lines[1] and "❯ 1. Yes" in lines[2]
+    u.handle_key(Key("down"))
+    u.handle_key(Key("down"))
+    u.handle_key(Key("enter"))
+    t.join(2)
+    assert box["v"] == "n" and "denied" in screen(out.getvalue()) and u.menu is None
+
+
+def test_menu_escape_cancels_to_no(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "WORKDIR", tmp_path)
+    u, _ = live()
+    args = {"path": "x.py", "content": "1"}
+    tool = tools.REGISTRY["write_file"]
+    t, box = in_thread(lambda: u.permission("", tool.preview(**args), tool, args))
+    for _ in range(50):
+        if u.menu:
+            break
+        threading.Event().wait(0.01)
+    u.handle_key(Key("esc"))
+    t.join(2)
+    assert box["v"] == "n"
+
+
+def test_each_permission_option_gives_its_own_answer(tmp_path, monkeypatch):
+    """Regression: the options were mapped in the wrong order, so No meant always."""
+    monkeypatch.setattr(config, "WORKDIR", tmp_path)
+    tool = tools.REGISTRY["bash"]
+    args = {"command": "ls"}
+    for key, want in (("y", "y"), ("a", "a"), ("n", "n")):
+        u, _ = live()
+        t, box = in_thread(lambda: u.permission("", tool.preview(**args), tool, args))
+        for _ in range(50):
+            if u.menu:
+                break
+            threading.Event().wait(0.01)
+        u.handle_key(Key("char", key))
+        t.join(2)
+        assert box["v"] == want

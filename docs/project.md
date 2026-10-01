@@ -90,9 +90,22 @@ never wraps; the spinner also covers running tools (`Running Bash… 4s`), closi
 ↑/↓ recall input across runs (`readline`, history next to the sessions). The banner shows only
 model, workdir and session; `/status` (both modes) adds host, context used (estimated, against
 `num_ctx` and the compaction threshold), sandbox, reviewer and yolo. Checked live in a
-pseudo-terminal, with and without `--yolo`. Not done (phase 2): a bordered input box and a status
-footer that stay at the bottom while output scrolls, Esc to interrupt, arrow-key permission menus,
-multi-line input; phase 3: `/` completion, expanding a folded result.
+pseudo-terminal, with and without `--yolo`.
+
+**Terminal UI, phase 2** (`LiveUI` in `tui.py`, `keys.py`). A bottom area that stays put while the
+conversation scrolls into scrollback: the spinner or the answer line being written, a bordered input
+box, and a footer (model, context used, key hints). The terminal runs key-at-a-time with no echo
+and no signal keys (`termios`), so Ctrl-C and Esc are keys the UI interprets: during a turn they
+send the process a real SIGINT (it breaks a blocked network read), otherwise Ctrl-C clears the box
+and twice exits. A reader thread handles keys while the agent works, so Enter during a turn queues
+the message. Multi-line input with Alt+Enter or Ctrl+J, and bracketed paste (a pasted log is one
+message). Permission prompts and the `/resume` picker are arrow-key menus. Everything else printed
+goes through a stdout proxy into scrollback above the box; the terminal is restored on any exit.
+`bash` commands now get `/dev/null` as stdin: before, one that read input waited on the user's
+terminal until the timeout (and would have stolen keys from the box). Falls back to phase 1's line
+input if the terminal can't do this. Caught by a test before use: the permission menu mapped its
+options in the wrong order, so "No" answered "always". Checked live in a pseudo-terminal with raw
+keystrokes: typing and Enter, both menus, a two-line paste, Esc mid-answer, `/status`, Ctrl-D.
 
 **`grep` / `glob`** (`tools.py`). Pure Python, read-only (no prompts), skipping `.git`, `.venv`,
 `node_modules`, caches and binary files, and never following a symlink out of `WORKDIR`. Tool
@@ -701,11 +714,12 @@ Recommended or noticed while adding `--hosts`, not done yet:
 
 ### Terminal UI
 
-- **Phase 2: the live bottom area.** A bordered input box and a status footer (model, context
-  used, session) that stay at the bottom while output scrolls above; Esc to interrupt; arrow-key
-  permission menus instead of y/n/a; multi-line input (pasting a log as one message). Needs raw
-  keyboard input (`termios`/`tty`) and a reader thread while the agent runs; watch terminal
-  resizes and tmux.
+- ~~**Phase 2: the live bottom area.**~~ Done (see What was built).
+- **Resizing the terminal** redraws the bottom area at the new width, but lines already drawn at
+  the old width may rewrap and leave a stray line or two. Not seen yet in use; fix if it bothers.
+- **Wide characters** (CJK, most emoji) in the input box count as one column, so the box's right
+  edge can shift on lines that contain them.
+- **Not tried in tmux or a non-Linux terminal** (Windows has no `termios`: it falls back to phase 1).
 - **Phase 3:** `/` command completion; expanding a folded result or the reasoning on demand.
 
 ### Known limitations

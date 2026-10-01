@@ -292,3 +292,9 @@ def test_search_history_says_when_only_its_own_replies_matched():
     user = {"role": "user", "content": "the load balancer probes GET /_probe/ready"}
     assert "Only your own earlier replies matched" in search([own, user], "readiness")
     assert "Only your own" not in search([own, user], "probe")    # the user's message matched too
+
+
+def test_bash_commands_get_no_terminal_input(agent):
+    """A command that reads stdin must not wait on (or steal from) the user's terminal."""
+    out = call(agent, "bash", command="read line; echo \"got:[$line] status:$?\"")
+    assert "got:[] status:1" in out

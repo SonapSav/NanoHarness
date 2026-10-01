@@ -223,6 +223,9 @@ def bash(command):
     proc = subprocess.Popen(
         argv,
         cwd=config.WORKDIR,
+        # Never the user's terminal: a command waiting for input would steal keystrokes from
+        # the UI (or sit until the timeout). It gets end-of-input at once instead.
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

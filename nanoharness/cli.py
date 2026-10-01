@@ -66,64 +66,95 @@ def main(argv=None):
     if history:
         print(f"\033[90mresumed · {len(history)} messages · last request: "
               f"{last_request(history)!r}\033[0m\n")
-    if sys.stdin.isatty():
-        input_history()
-
-    if rich:
+    live = start_live() if rich and sys.stdin.isatty() else None
+    if live:
+        printer = live
+    elif rich:
+        if sys.stdin.isatty():
+            input_history()
         printer = tui.RichUI()
-        ui.use(printer)
     else:
+        if sys.stdin.isatty():
+            input_history()
         printer = StreamPrinter() if config.STREAM else None
+    if rich:
+        ui.use(printer)
     agent = Agent(Permissions(yolo=args.yolo), on_token=printer, session=sess, messages=history)
+    if live:
+        live.footer = footer(agent)
+        live.set_busy(False)        # redraw with the footer filled in
+    try:
+        return repl(agent, printer, live, args)
+    finally:
+        if live:
+            live.close()
+            save_live_history(live)
 
+
+def repl(agent, printer, live, args):
     while True:
+        if live:
+            live.footer = footer(agent)
         try:
-            user_input = input(PROMPT).strip()
+            user_input = (live.read_line() if live else input(PROMPT)).strip()
         except (EOFError, KeyboardInterrupt):
             print()
             return 0
-
-        if not user_input:
-            continue
-        if user_input in ("/exit", "/quit"):
-            return 0
-        if user_input == "/reset":
-            agent = Agent(agent.permissions, agent.on_token, session=Session())
-            print(f"new session {agent.session.id} (the old one stays saved)")
-            continue
-        if user_input == "/sessions":
-            print(format_sessions(session.list_sessions(), numbered=True, current=agent.session.id))
-            continue
-        if user_input == "/resume" or user_input.startswith("/resume "):
-            agent = switch_session(agent, user_input[len("/resume"):].strip())
-            continue
-        if user_input == "/status":
-            print(status(agent, args.yolo))
-            continue
-        if user_input == "/messages":
-            import json
-            print(json.dumps(agent.messages, indent=2)[:8000])
-            continue
-
-        if printer:
-            printer.reset()
         try:
-            try:
-                answer = agent.turn(user_input)
-            finally:
-                if printer:
-                    printer.stop()
-            if printer is None or answer != printer.last:  # e.g. "(stopped after ...)"
-                print(answer)
-            print()
-        except ModelError as e:
+            agent = step(agent, printer, live, args, user_input)
+        except KeyboardInterrupt:   # a stray interrupt between turns: ignore it, keep going
+            continue
+        if agent is None:
+            return 0
+
+
+def step(agent, printer, live, args, user_input):
+    """One line of input: a command or a turn. Returns the agent to go on with, None to quit."""
+    if not user_input:
+        return agent
+    if user_input in ("/exit", "/quit"):
+        return None
+    if user_input == "/reset":
+        agent = Agent(agent.permissions, agent.on_token, session=Session())
+        print(f"new session {agent.session.id} (the old one stays saved)")
+        return agent
+    if user_input == "/sessions":
+        print(format_sessions(session.list_sessions(), numbered=True, current=agent.session.id))
+        return agent
+    if user_input == "/resume" or user_input.startswith("/resume "):
+        return switch_session(agent, user_input[len("/resume"):].strip(), live)
+    if user_input == "/status":
+        print(status(agent, args.yolo))
+        return agent
+    if user_input == "/messages":
+        import json
+        print(json.dumps(agent.messages, indent=2)[:8000])
+        return agent
+
+    if printer:
+        printer.reset()
+    if live:
+        live.set_busy(True)
+    try:
+        try:
+            answer = agent.turn(user_input)
+        finally:
             if printer:
-                printer.break_line()
-            print(f"\033[31m{e}\033[0m")
-            print(recovery_hint(agent))
-        except KeyboardInterrupt:
-            print("\n\033[31minterrupted\033[0m")
-            print(recovery_hint(agent))
+                printer.stop()
+            if live:
+                live.set_busy(False)
+        if printer is None or answer != printer.last:  # e.g. "(stopped after ...)"
+            print(answer)
+        print()
+    except ModelError as e:
+        if printer:
+            printer.break_line()
+        print(f"\033[31m{e}\033[0m")
+        print(recovery_hint(agent))
+    except KeyboardInterrupt:
+        print("\n\033[31minterrupted\033[0m")
+        print(recovery_hint(agent))
+    return agent
 
 
 class StreamPrinter:
@@ -221,10 +252,13 @@ class StreamPrinter:
             self.status = False
 
 
-def rich_banner(session_id, yolo):
+def rich_banner(session_id, yolo, columns=None):
     rows = [("model", config.MODEL), ("workdir", str(config.WORKDIR)), ("session", session_id)]
     if yolo:
         rows.append(("yolo", "permissions disabled"))
+    import shutil
+    room = (columns or shutil.get_terminal_size((100, 24)).columns) - 15   # borders and the key
+    rows = [(k, v if len(v) <= room else "…" + v[-(room - 1):]) for k, v in rows]  # keep the end
     inner = max(len(f"{k:<8} {v}") for k, v in rows) + 2
     top = f"\033[38;5;208m╭─ ✻ \033[1mNanoHarness\033[0m\033[38;5;208m {'─' * (inner - 15)}╮\033[0m"
     body = [f"\033[38;5;208m│\033[0m {k:<8} {v:<{inner - 11}} \033[38;5;208m│\033[0m"
@@ -252,6 +286,49 @@ def status(agent, yolo):
 def strip_ansi(text):
     import re
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
+def start_live():
+    """The phase 2 UI, or None if this terminal can't do key-at-a-time input."""
+    try:
+        live = tui.LiveUI(history=load_live_history())
+        live.start(sys.stdin.fileno())
+        return live
+    except Exception as e:   # no termios, odd terminal: phase 1's line input still works
+        print(f"\033[90m(input box unavailable: {e}; using line input)\033[0m")
+        return None
+
+
+LIVE_HISTORY_MAX = 1000
+
+
+def live_history_path():
+    return config.SESSION_DIR.parent / "input_history.json"
+
+
+def load_live_history():
+    import json
+    try:
+        data = json.loads(live_history_path().read_text())
+        return [x for x in data if isinstance(x, str)][-LIVE_HISTORY_MAX:]
+    except (OSError, ValueError):
+        return []
+
+
+def save_live_history(live):
+    import json
+    try:
+        path = live_history_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(live.editor.history[-LIVE_HISTORY_MAX:]))
+    except OSError:
+        pass
+
+
+def footer(agent):
+    """The footer's left side: model and how full the context is."""
+    used = context.estimate_tokens(agent.messages)
+    return f"{config.MODEL} · ctx {100 * used // config.NUM_CTX}%"
 
 
 def input_history():
@@ -312,6 +389,17 @@ def pick_session(current=None, none_means="a new session"):
     return chosen(choice, sessions)
 
 
+def choose_session(live, current):
+    """/resume's picker as an arrow-key menu (LiveUI)."""
+    sessions = session.list_sessions()
+    if not sessions:
+        print("no saved sessions for this directory")
+        return None
+    rows = [strip_ansi(r).strip() for r in format_sessions(sessions, current=current).split("\n")]
+    index = live.choose("Resume which session?", rows + ["Stay here"], cancel=len(rows))
+    return sessions[index]["id"] if index < len(rows) else None
+
+
 def chosen(choice, sessions):
     """A number from the list (1 = newest) or a session id; None for nothing."""
     if choice.isdigit() and 1 <= int(choice) <= len(sessions):
@@ -319,11 +407,16 @@ def chosen(choice, sessions):
     return choice or None
 
 
-def switch_session(agent, choice):
+def switch_session(agent, choice, live=None):
     """/resume: the agent on another saved session, or the same agent if that fails.
     The current one is already saved (after every message), so leaving it loses nothing."""
     current = agent.session.id
-    id = chosen(choice, session.list_sessions()) if choice else pick_session(current, "staying here")
+    if choice:
+        id = chosen(choice, session.list_sessions())
+    elif live:
+        id = choose_session(live, current)
+    else:
+        id = pick_session(current, "staying here")
     if not id or id == current:
         print(f"staying in session {current}")
         return agent
