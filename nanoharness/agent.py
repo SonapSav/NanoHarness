@@ -1,6 +1,8 @@
 """The loop. Everything else exists to serve these ~40 lines."""
 import json
 
+from contextvars import ContextVar
+
 from . import client, config, context, review, ui
 from .permissions import CURRENT, Denied, Permissions
 from .tools import ARCHIVE, ON_DEMAND, REGISTRY, ToolError, file_tree, resolve, schemas
@@ -8,6 +10,12 @@ from .tools import ARCHIVE, ON_DEMAND, REGISTRY, ToolError, file_tree, resolve, 
 # Seen live: a search found the answer, the model overlooked it and ran the same grep over and
 # over until it hit the step limit. The call still runs (a rerun after an edit can differ);
 # only an identical result gets the note.
+# The top-level turn's record of files as they were before it first wrote them, so a
+# subagent's edits land in it too and /undo covers them.
+TURN_BEFORE: ContextVar[dict] = ContextVar("turn_before")
+
+UNDO_MARK = "[NanoHarness: the user undid"
+
 REPEAT_NOTE = ("\n\n[You already made this exact call earlier in this turn and got the same "
                "result. Repeating it won't change anything: try something different, or tell the "
                "user what you could not find.]")
@@ -42,6 +50,9 @@ class Agent:
         # bash command, and a snapshot of the working directory at the start.
         self.before, self.last_command, self.steps, self.commands, self.start = {}, "", [], [], None
         self.verdict = None          # (faked, reason) from the last turn's review, if one ran
+        # /undo: the last turn that changed files: {"before": {path: text or None},
+        # "by_commands": [paths changed through bash, no copy kept]}
+        self.last_change = None
 
     def available(self):
         """Tool names offered right now: search_history once there is an archive to search."""
@@ -94,9 +105,41 @@ class Agent:
 
     def remember_before(self, path: str):
         key = str(resolve(path).relative_to(config.WORKDIR)) if path else ""
-        if key and key not in self.before:
-            p = config.WORKDIR / key
-            self.before[key] = p.read_text(errors="replace") if p.is_file() else None
+        record = TURN_BEFORE.get(self.before) if self.depth else self.before
+        for target in {id(self.before): self.before, id(record): record}.values():
+            if key and key not in target:
+                p = config.WORKDIR / key
+                target[key] = p.read_text(errors="replace") if p.is_file() else None
+
+    def undo(self):
+        """/undo: put back the files the last changing turn wrote, delete the ones it created,
+        and tell the model. Returns (restored, removed, failed, not_undone) or None."""
+        change, self.last_change = self.last_change, None
+        if not change:
+            return None
+        restored, removed, failed = [], [], []
+        for path, text in change["before"].items():
+            p = config.WORKDIR / path
+            try:
+                if text is None:
+                    if p.exists():
+                        p.unlink()
+                        removed.append(path)
+                else:
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.write_text(text)
+                    restored.append(path)
+            except OSError as e:
+                failed.append(f"{path} ({e})")
+        parts = [f"Restored to how they were before it: {', '.join(restored)}." if restored else "",
+                 f"Deleted (that turn had created them): {', '.join(removed)}." if removed else "",
+                 f"Not undone (changed by a command, no copy was kept): {', '.join(change['by_commands'])}."
+                 if change["by_commands"] else ""]
+        self.messages.append({"role": "user", "content": (
+            f"{UNDO_MARK} the file changes of your previous turn. " + " ".join(p for p in parts if p)
+            + " Do not rely on those changes; read the files again before building on them.]")})
+        self.save()
+        return restored, removed, failed, change["by_commands"]
 
     def review_turn(self, request: str, answer: str):
         """Ask review.py whether this turn's changes fake a pass; warn the user if so.
@@ -144,7 +187,8 @@ class Agent:
         self.stopped = False
         self.before, self.last_command, self.steps, self.commands = {}, "", [], []
         self.verdict = None
-        self.start = review.snapshot() if config.REVIEW and not self.depth else None
+        self.start = review.snapshot() if not self.depth else None    # for review and /undo
+        token = TURN_BEFORE.set(self.before) if not self.depth else None
         self.save()
         try:
             answer = self._loop()
@@ -160,7 +204,18 @@ class Agent:
                 self.dropped_input = True
             raise
         finally:
+            if token is not None:
+                TURN_BEFORE.reset(token)
+                self.keep_for_undo()
             self.save()
+
+    def keep_for_undo(self):
+        """After a top-level turn (also a failed one: its writes happened): what /undo would
+        take back. A turn that changed nothing leaves the previous record in place."""
+        changed = review.changed(self.start) if self.start is not None else set()
+        by_commands = sorted(changed - self.before.keys() - {"?"})
+        if self.before or by_commands:
+            self.last_change = {"before": dict(self.before), "by_commands": by_commands}
 
     def _loop(self):
         seen = {}   # (tool, arguments) -> last result, for this turn

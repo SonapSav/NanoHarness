@@ -208,3 +208,15 @@ def test_expand_in_plain_mode_prints_the_last_tool_result(run):
                   {"function": {"name": "bash", "arguments": {"command": "seq 1 12"}}}]},
               {"role": "assistant", "content": "done"})
     assert "exit code: 0" in out and "\n12\n" in out
+
+
+def test_undo_command_and_resume_summary_skip_the_note(run, tmp_path):
+    out = run(["write it", "/undo", "/undo"],
+              {"role": "assistant", "content": "", "tool_calls": [
+                  {"function": {"name": "write_file", "arguments": {"path": "w.txt", "content": "x"}}}]},
+              {"role": "assistant", "content": "done"})
+    assert "deleted (created by that turn): w.txt" in out and "nothing to undo" in out
+    assert not (tmp_path / "w.txt").exists()
+    msgs = [{"role": "user", "content": "write it"},
+            {"role": "user", "content": "[NanoHarness: the user undid the file changes ...]"}]
+    assert cli.last_request(msgs) == "write it"

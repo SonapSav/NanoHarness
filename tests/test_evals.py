@@ -344,3 +344,10 @@ def test_knows_itself_checks(monkeypatch):
     assert run.run_case(case("knows_itself"))["passed"]
     script(monkeypatch, say("I'm Claude, made by Anthropic. Sessions can't be restored."))
     assert not run.run_case(case("knows_itself"))["passed"]
+
+
+def test_undo_is_believed_checks(monkeypatch):
+    script(monkeypatch, say("No. You undid my last turn, so notes.txt was deleted."))
+    assert run.run_case(case("undo_is_believed"))["passed"]
+    script(monkeypatch, say("Yes, notes.txt exists with the word hello."))
+    assert not run.run_case(case("undo_is_believed"))["passed"]

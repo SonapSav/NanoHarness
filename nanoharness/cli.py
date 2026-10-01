@@ -133,6 +133,9 @@ def step(agent, printer, live, args, user_input):
     if user_input == "/note" or user_input.startswith("/note "):
         print(note(agent, user_input[len("/note"):].strip()))
         return agent
+    if user_input == "/undo":
+        print(undo(agent))
+        return agent
     if user_input == "/services" or user_input.startswith("/services "):
         parts = user_input.split()
         if len(parts) == 3 and parts[1] == "stop":
@@ -387,6 +390,19 @@ def save_live_history(live):
         pass
 
 
+def undo(agent):
+    result = agent.undo()
+    if result is None:
+        return "\033[90mnothing to undo (no turn has changed files since the last /undo)\033[0m"
+    restored, removed, failed, not_undone = result
+    lines = [f"  restored: {', '.join(restored)}" if restored else "",
+             f"  deleted (created by that turn): {', '.join(removed)}" if removed else "",
+             f"  \033[31mfailed: {', '.join(failed)}\033[0m" if failed else "",
+             f"  \033[33mnot undone (changed by a command, no copy kept): {', '.join(not_undone)}\033[0m"
+             if not_undone else ""]
+    return "undone; the agent is told\n" + "\n".join(l for l in lines if l)
+
+
 def notes_path():
     return config.SESSION_DIR.parent / "notes.jsonl"
 
@@ -555,8 +571,9 @@ def format_sessions(sessions, numbered=False, current=None):
 
 
 def last_request(messages) -> str:
+    from .agent import UNDO_MARK
     for m in reversed(messages):
-        if m["role"] == "user":
+        if m["role"] == "user" and not m["content"].startswith(UNDO_MARK):
             return " ".join(m["content"].split())[:70]
     return ""
 

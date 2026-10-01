@@ -40,7 +40,7 @@ class PlainUI:
     def review(self, faked, reason):
         if faked:
             print(f"\033[33m  ⚠ review: this may make a check pass without fixing it: "
-                  f"{reason}\033[0m")
+                  f"{reason} · /undo to take it back\033[0m")
 
     def review_failed(self, error):
         print(f"\033[90m  (review failed: {error})\033[0m")

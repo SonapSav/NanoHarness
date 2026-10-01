@@ -334,7 +334,7 @@ class RichUI(ui.PlainUI):
         self._review_done()
         if faked:
             self._commit(f"{YELLOW}⚠ Review: this may make a check pass without fixing it: "
-                         f"{reason}{RESET}")
+                         f"{reason}{RESET} {GREY}· /undo to take it back{RESET}")
 
     def review_failed(self, error):
         self._review_done()

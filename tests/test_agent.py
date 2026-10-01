@@ -228,3 +228,57 @@ def test_the_system_prompt_says_what_the_agent_is_but_not_the_host():
     assert "none asked (--yolo)" in config.about(yolo=True)
     assert config.about() in Agent(Permissions(yolo=False)).messages[0]["content"]
     assert "none asked (--yolo)" in Agent(Permissions(yolo=True)).messages[0]["content"]
+
+
+# --- /undo --------------------------------------------------------------------------------
+
+def test_undo_restores_edits_deletes_new_files_and_tells_the_model(agent, monkeypatch, tmp_path):
+    (tmp_path / "app.py").write_text("x = 1\n")
+    script(monkeypatch,
+           reply("", tool_call("edit_file", path="app.py", old_string="x = 1", new_string="x = 2"),
+                 tool_call("write_file", path="new.py", content="print(1)\n")),
+           reply("Done."))
+    agent.turn("change things")
+    assert (tmp_path / "app.py").read_text() == "x = 2\n" and (tmp_path / "new.py").exists()
+    restored, removed, failed, not_undone = agent.undo()
+    assert restored == ["app.py"] and removed == ["new.py"] and not failed and not not_undone
+    assert (tmp_path / "app.py").read_text() == "x = 1\n" and not (tmp_path / "new.py").exists()
+    note = agent.messages[-1]
+    assert note["role"] == "user" and note["content"].startswith("[NanoHarness: the user undid")
+    assert "app.py" in note["content"] and "new.py" in note["content"]
+    assert agent.undo() is None                          # one level
+
+
+def test_files_changed_by_a_command_are_listed_not_restored(agent, monkeypatch, tmp_path):
+    script(monkeypatch, reply("", tool_call("bash", command="echo hi > made.txt")), reply("Done."))
+    agent.turn("make a file")
+    restored, removed, failed, not_undone = agent.undo()
+    assert not_undone == ["made.txt"] and not restored and (tmp_path / "made.txt").exists()
+    assert "Not undone (changed by a command" in agent.messages[-1]["content"]
+
+
+def test_a_turn_that_changed_nothing_keeps_the_previous_record(agent, monkeypatch, tmp_path):
+    script(monkeypatch, reply("", tool_call("write_file", path="a.txt", content="1")), reply("Done."),
+           reply("Just talking."))
+    agent.turn("write a.txt")
+    agent.turn("hi")
+    assert agent.undo()[1] == ["a.txt"]
+
+
+def test_a_failed_turn_after_writing_can_still_be_undone(agent, monkeypatch, tmp_path):
+    script(monkeypatch, reply("", tool_call("write_file", path="a.txt", content="1")), ModelError("down"))
+    with pytest.raises(ModelError):
+        agent.turn("write a.txt")
+    assert agent.undo()[1] == ["a.txt"] and not (tmp_path / "a.txt").exists()
+
+
+def test_a_subagents_edits_land_in_the_turns_record(agent, tmp_path):
+    from nanoharness.agent import TURN_BEFORE
+    (tmp_path / "b.txt").write_text("old")
+    record = {}
+    token = TURN_BEFORE.set(record)
+    try:
+        Agent(Permissions(yolo=True), depth=1).remember_before("b.txt")
+    finally:
+        TURN_BEFORE.reset(token)
+    assert record == {"b.txt": "old"}

@@ -51,7 +51,9 @@ Permission prompts and the `/resume` picker are menus: ↑/↓ and Enter, or `y`
 
 The startup panel shows a logo slot with the model, directory and session on the left, and the
 tools and safety settings on the right; `/status` adds the host and how full the context is,
-`/help` lists commands and keys. `/note <text>` keeps a remark about the session (what went wrong,
+`/help` lists commands and keys. `/undo` takes back the file changes of the last turn that made
+any (edited files restored, new ones deleted; files changed only through `bash` are listed, not
+restored), and tells the agent. `/note <text>` keeps a remark about the session (what went wrong,
 what felt clumsy) in `~/.local/share/nanoharness/notes.jsonl`, with the session id and how far
 in it was, so the moment can be found again. Stdlib only.
 

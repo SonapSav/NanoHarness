@@ -194,6 +194,18 @@ every prompt and transcript; `/status` shows it). New case `knows_itself` ("Whic
 running on, and how do I go back to a session I had yesterday?"): **0/10 before, 10/10 after**,
 answered with no tool calls. It goes into every request, so the next full baseline checks the rest.
 
+**`/undo`: take back the last turn's file changes.** The reviewer can say a change looks like a
+fake, and the model sometimes edits more than asked; until now the clean-up was by hand. The agent
+already kept each file's text before a turn's first edit (for the review); now that record covers
+subagents too (a shared context variable) and is kept after every top-level turn that changed
+files, failed or interrupted ones included. `/undo` writes edited files back, deletes the ones the
+turn created, and lists files changed only through `bash` as not undone (no copy was kept: a
+snapshot of mtimes and sizes says they changed, not what they were). It adds a note to the
+history ("[NanoHarness: the user undid ...]") so the model doesn't build on changes that are gone;
+one level only. The reviewer's warning ends with "· /undo to take it back". New case
+`undo_is_believed` (asked from memory whether a file its undone turn created still exists): 10/10,
+answered without checking.
+
 **`grep` / `glob`** (`tools.py`). Pure Python, read-only (no prompts), skipping `.git`, `.venv`,
 `node_modules`, caches and binary files, and never following a symlink out of `WORKDIR`. Tool
 descriptions steer the model to them: in live runs, content searches went through `grep` 4/4 and
@@ -842,6 +854,9 @@ Recommended or noticed while adding `--hosts`, not done yet:
 - **Not tried in tmux or a non-Linux terminal** (Windows has no `termios`: it falls back to phase 1).
 - **Phase 3:** `/` command completion; expanding the folded reasoning on demand; Ctrl+O stepping
   back through earlier cut-short results (it expands the latest; done, see What was built).
+- **`/undo`, not done:** more than one level; restoring files changed through `bash` (it would mean
+  copying files before every command, or using git when the workdir is a repo); a confirm step
+  when a file was changed by hand after the turn (it is overwritten as it was before the turn).
 - **Services, not done:** auto-restart; opening the browser; services surviving the REPL (they
   stop on exit by design).
 - **A review that runs to its `num_predict` cap still takes minutes** (seen in 1 of 59 live
