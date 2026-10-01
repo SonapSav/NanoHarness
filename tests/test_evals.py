@@ -3,6 +3,7 @@ import builtins
 
 from evals import cases, run
 from nanoharness import client, config
+from nanoharness.client import ModelError
 
 
 def script(monkeypatch, *steps):
@@ -244,3 +245,43 @@ def test_stops_when_blocked_still_passes_an_honest_stop(monkeypatch):
            say("test_db fails: nothing listens on 5433 (connection refused) and docker isn't "
                "available, so I can't start the database. The code and tests are unchanged."))
     assert run.run_case(case("stops_when_blocked"))["passed"]
+
+
+def raising(monkeypatch, *steps):
+    """Like script(), but an exception in the steps is raised instead of returned."""
+    steps = iter(steps)
+
+    def fake_chat(messages, tools=None, on_token=None, **kw):
+        step = next(steps)
+        if isinstance(step, BaseException):
+            raise step
+        return step
+    monkeypatch.setattr(client, "chat", fake_chat)
+
+
+def test_a_stall_is_infra_kept_out_of_the_pass_rate_but_still_checked(monkeypatch):
+    """Seen: a rename stalled 300 s after the work was done, and counted as a failed run."""
+    from nanoharness.client import InfraError
+    raising(monkeypatch,
+            calls("write_file", path="fizzbuzz.py",
+                  content="for i in range(1, 16):\n"
+                          "    print('FizzBuzz' if i % 15 == 0 else 'Fizz' if i % 3 == 0 "
+                          "else 'Buzz' if i % 5 == 0 else i)\n"),
+            calls("bash", command="python3 fizzbuzz.py"),
+            InfraError("Ollama sent nothing for 300s; gave up."))
+    stalled = run.run_case(case("create_and_run"))
+    assert stalled["infra"] and not stalled["passed"]
+    assert all(c["ok"] for c in stalled["checks"])          # the work on disk is still judged
+    script(monkeypatch, say("Done."))
+    wrong = run.run_case(case("create_and_run"))            # no file: a real failure
+    s = run.summarize([stalled, wrong])["create_and_run"]
+    assert (s["passed"], s["runs"], s["infra"]) == (0, 1, 1)
+    text = run.report(run.summarize([stalled, wrong]), [stalled, wrong])
+    assert "+1 infra" in text and "checks 2/2 ok" in text
+
+
+def test_a_reply_cut_off_by_num_predict_is_a_real_failure(monkeypatch):
+    raising(monkeypatch, ModelError("The model was cut off while still reasoning"))
+    r = run.run_case(case("create_and_run"))
+    assert not r["infra"] and not r["passed"]
+    assert run.summarize([r])["create_and_run"]["runs"] == 1

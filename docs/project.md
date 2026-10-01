@@ -279,8 +279,15 @@ Recommended or noticed while adding `--hosts`, not done yet:
 - ~~Take a new full baseline~~: done at `a1c9b01`, 146/150 (see [Eval baseline](#eval-baseline)).
   It took ~45 min over both servers, not the ~20 estimated: the compaction and big-project cases
   run over a minute each.
-- **Retry an Ollama stall on the other server**, or at least report infrastructure errors apart from
-  wrong answers, so a stall stops lowering the pass rate.
+- ~~**Report infrastructure errors apart from wrong answers**~~, done: `client.py` raises
+  `InfraError` (a `ModelError`, so the REPL is unchanged) for a stall, no route, a broken or
+  garbled stream, an `error` line, or HTTP 5xx; the `num_predict` cut-off and HTTP 4xx (our bad
+  request) stay plain `ModelError`s. The runner marks such runs `infra`, prints `INFRA`, leaves
+  them out of pass rates (`+N infra` on the case and host rows), and lists them apart with how
+  many checks passed on what was on disk. Checked with tests and a dry run against a dead port.
+  **Not done: retrying** a stalled run on the other server. Reporting was enough to stop stalls
+  lowering pass rates; a retry would also hide a flaky server, and each run starts fresh, so
+  rerunning a case by hand is easy.
 - **Measure whether subagents on the second server keep the main cache warm.** The main agent waits
   for a subagent either way, so there is no direct speedup. But if Ollama keeps one cached prompt per
   model, a subagent on the same server replaces the main history's cache, and it must be
@@ -583,5 +590,5 @@ Recommended or noticed while adding `--hosts`, not done yet:
   says so).
 - **Eval samples are small** (5–10 runs per case). Early on, 3 runs of FizzBuzz looked like 2/3 and
   turned out to be 45% over 20; judge changes with `-n 10` or more on the cases they target.
-- **The eval runner counts an Ollama stall as a failed run**, even when the work on disk passes every
-  check. Read the failure line before trusting a lower pass rate.
+- ~~**The eval runner counts an Ollama stall as a failed run**~~: no longer; it is reported as
+  `infra` and left out of the pass rate (see [Using the second server](#using-the-second-server)).

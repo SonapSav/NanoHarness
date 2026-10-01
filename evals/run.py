@@ -28,7 +28,7 @@ from pathlib import Path
 
 from nanoharness import config, context, tools
 from nanoharness.agent import Agent
-from nanoharness.client import ModelError
+from nanoharness.client import InfraError, ModelError
 from nanoharness.permissions import Permissions
 
 from .cases import CASES
@@ -58,13 +58,14 @@ def run_case(case, keep=False):
     # Agent swaps in today's system prompt for the first message, so a placeholder will do.
     history = [{"role": "system", "content": ""}] + case.history if case.history else None
     agent = Agent(Permissions(yolo=case.approve == "all"), messages=history)
-    out, error, answer = io.StringIO(), None, ""
+    out, error, answer, infra = io.StringIO(), None, "", False
     start = time.monotonic()
     try:
         with redirect_stdout(out):
             answer = agent.turn(case.prompt)
     except ModelError as e:
         error = str(e)
+        infra = isinstance(e, InfraError)   # a stall says nothing about the model
     finally:
         builtins.input = saved_input
     seconds = time.monotonic() - start
@@ -93,6 +94,7 @@ def run_case(case, keep=False):
         "passed": error is None and all(r["ok"] for r in results),
         "checks": results,
         "error": error,
+        "infra": infra,     # left out of pass rates; its checks still ran (work may be done)
         "answer": answer,
         "tools": dict(tool_counts),
         "repeats": repeats,
@@ -112,7 +114,7 @@ def run_case(case, keep=False):
 def crashed(case, error):
     """The result of a run that raised instead of finishing: failed, with the reason."""
     return {"case": case.name, "group": case.group, "passed": False, "checks": [],
-            "error": error, "answer": "", "tools": {}, "sub_tools": {}, "prompts": 0,
+            "error": error, "infra": False, "answer": "", "tools": {}, "sub_tools": {}, "prompts": 0,
             "rounds": 0, "tokens": 0, "seconds": 0.0, "stopped": None, "workdir": None,
             "stdout": "", "messages": []}
 
@@ -192,10 +194,12 @@ def summarize(runs):
     summary = {}
     for name, rs in by_case.items():
         n = len(rs)
+        counted = [r for r in rs if not r.get("infra")]   # a stall is not a wrong answer
         summary[name] = {
             "group": rs[0]["group"],
-            "passed": sum(r["passed"] for r in rs),
-            "runs": n,
+            "passed": sum(r["passed"] for r in counted),
+            "runs": len(counted),
+            "infra": n - len(counted),
             "tools": round(sum(sum(r["tools"].values()) for r in rs) / n, 1),
             "bash": round(sum(r["tools"].get("bash", 0) for r in rs) / n, 1),
             "sub": round(sum(sum(r.get("sub_tools", {}).values()) for r in rs) / n, 1),
@@ -217,17 +221,22 @@ def report(summary, runs, baseline=None):
         row = f"{name:<24}{s['group']:<10}{s['passed']:>4}/{s['runs']:<2}"
         if base:
             b = base.get(name)
-            if b:
+            if b and s["runs"] and b["runs"]:
                 delta = s["passed"] / s["runs"] - b["passed"] / b["runs"]
                 mark = "+" if delta > 0 else "-" if delta < 0 else " "
                 row += f"{b['passed']:>4}/{b['runs']:<1}{mark}"
             else:
                 row += f"{'new':>7}"
         row += f"{s['tools']:>7}{s['bash']:>6}{s.get('sub', 0):>6}{s.get('rep', 0):>5}{s['tokens']:>8}{s['seconds']:>7}"
+        if s.get("infra"):
+            row += f"  +{s['infra']} infra"
         lines.append(row)
         total += s["passed"]
         total_runs += s["runs"]
     lines += ["-" * len(head), f"{'total':<34}{total:>4}/{total_runs}  ({100 * total // max(total_runs, 1)}%)"]
+    infra = [r for r in runs if r.get("infra")]
+    if infra:
+        lines.append(f"{'infra':<34}{len(infra):>4} runs not counted (server or connection failed)")
 
     hosts = {}
     for r in runs:
@@ -236,14 +245,22 @@ def report(summary, runs, baseline=None):
         lines.append("by host:")
         for host, rs in hosts.items():
             secs = sum(r["seconds"] for r in rs) / len(rs)
-            lines.append(f"  {host:<32}{sum(r['passed'] for r in rs):>4}/{len(rs):<4}{secs:>8.1f}s avg")
+            counted = [r for r in rs if not r.get("infra")]
+            down = len(rs) - len(counted)
+            lines.append(f"  {host:<32}{sum(r['passed'] for r in counted):>4}/{len(counted):<4}"
+                         f"{secs:>8.1f}s avg" + (f"  +{down} infra" if down else ""))
 
-    failures = [r for r in runs if not r["passed"]]
+    failures = [r for r in runs if not r["passed"] and not r.get("infra")]
     if failures:
         lines += ["", "failures:"]
         for r in failures:
             why = r["error"] or "; ".join(f"{c['check']} ({c['detail']})" for c in r["checks"] if not c["ok"])
             lines.append(f"  {r['case']}: {why}"[:240])
+    if infra:
+        lines += ["", "infra (not counted; checks still ran on what was on disk):"]
+        for r in infra:
+            ok = sum(c["ok"] for c in r["checks"])
+            lines.append(f"  {r['case']} on {r.get('host')}: {r['error']} [checks {ok}/{len(r['checks'])} ok]"[:240])
     return "\n".join(lines)
 
 
@@ -280,7 +297,8 @@ def main(argv=None):
     def show(done, index, r):
         case, i = jobs[index]
         where = f"  {r['host']}" if len(hosts) > 1 else ""
-        print(f"  [{done}/{len(jobs)}] {case.name} #{i + 1}  " + ("pass" if r["passed"] else "FAIL")
+        status = "pass" if r["passed"] else "INFRA" if r.get("infra") else "FAIL"
+        print(f"  [{done}/{len(jobs)}] {case.name} #{i + 1}  {status}"
               + f"  ({r['seconds']}s){where}", flush=True)
 
     runs = run_all(jobs, hosts, args.keep, show)

@@ -11,6 +11,11 @@ class ModelError(RuntimeError):
     pass
 
 
+class InfraError(ModelError):
+    """The server or the connection failed, not the model: a stall, no route, a broken stream.
+    The eval runner keeps these out of pass rates; for the REPL they are ModelErrors."""
+
+
 def chat(messages, tools=None, on_token=None, temperature=None):
     """Send the whole history plus tool schemas; return the assistant message dict.
 
@@ -48,16 +53,18 @@ def chat(messages, tools=None, on_token=None, temperature=None):
         with urllib.request.urlopen(req, timeout=config.HTTP_TIMEOUT) as resp:
             return read_stream(resp, on_token)
     except urllib.error.HTTPError as e:
-        raise ModelError(f"Ollama returned HTTP {e.code}: {e.read().decode()[:500]}") from e
+        # 5xx is the server's trouble; 4xx means we sent something wrong, a harness bug.
+        error = InfraError if e.code >= 500 else ModelError
+        raise error(f"Ollama returned HTTP {e.code}: {e.read().decode()[:500]}") from e
     except urllib.error.URLError as e:
-        raise ModelError(
+        raise InfraError(
             f"Cannot reach Ollama at {config.OLLAMA_HOST} ({e.reason}). "
             "Is `ollama serve` running?"
         ) from e
     except TimeoutError as e:
-        raise ModelError(f"Ollama sent nothing for {config.HTTP_TIMEOUT}s; gave up.") from e
+        raise InfraError(f"Ollama sent nothing for {config.HTTP_TIMEOUT}s; gave up.") from e
     except (OSError, http.client.HTTPException) as e:
-        raise ModelError(f"The connection to Ollama broke mid-reply: {e}") from e
+        raise InfraError(f"The connection to Ollama broke mid-reply: {e}") from e
 
 
 def read_stream(lines, on_token=None):
@@ -74,9 +81,9 @@ def read_stream(lines, on_token=None):
         try:
             chunk = json.loads(raw)
         except json.JSONDecodeError as e:
-            raise ModelError(f"Unexpected line from Ollama: {raw[:500]!r}") from e
+            raise InfraError(f"Unexpected line from Ollama: {raw[:500]!r}") from e
         if "error" in chunk:
-            raise ModelError(f"Ollama error: {chunk['error']}")
+            raise InfraError(f"Ollama error: {chunk['error']}")
 
         message = chunk.get("message") or {}
         for kind, parts in (("thinking", thinking), ("content", content)):
@@ -96,7 +103,7 @@ def read_stream(lines, on_token=None):
                 )
             break
     else:
-        raise ModelError("Ollama's reply ended before it was done.")
+        raise InfraError("Ollama's reply ended before it was done.")
 
     reply = {"role": "assistant", "content": "".join(content)}
     if thinking:

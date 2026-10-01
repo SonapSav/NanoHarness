@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from nanoharness.client import ModelError, read_stream
+from nanoharness.client import InfraError, ModelError, read_stream
 
 
 def line(done=False, **message):
@@ -40,6 +40,18 @@ def test_reply_cut_off_by_num_predict_raises():
                         "done_reason": "length"}) + "\n").encode()
     with pytest.raises(ModelError, match="while still reasoning"):
         read_stream([line(thinking="actually, wait"), last])
+
+
+def test_server_failures_are_infra_and_the_cutoff_is_not():
+    """The eval runner keeps InfraErrors out of pass rates; a cut-off is the model's doing."""
+    for lines in ([b'{"error": "runner crashed"}\n'], [line(content="half")], [b"<html>\n"]):
+        with pytest.raises(InfraError):
+            read_stream(lines)
+    last = (json.dumps({"message": {"role": "assistant", "content": ""}, "done": True,
+                        "done_reason": "length"}) + "\n").encode()
+    with pytest.raises(ModelError) as e:
+        read_stream([line(thinking="hmm"), last])
+    assert not isinstance(e.value, InfraError)
 
 
 def test_blank_lines_are_ignored():
