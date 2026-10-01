@@ -34,7 +34,8 @@ In a terminal the output looks like Claude Code's or Pi's, inline so it stays in
 terminal's scrollback: the model's reasoning folds to `✻ Thought for 4s`, each tool call is a
 `⏺ Write(weather.py)` line with a short `⎿` result (edits as a coloured diff), answers get light
 markdown, and a spinner with a timer shows whenever the model or a tool is busy. ↑/↓ recall
-earlier input across runs. Stdlib only.
+earlier input across runs. The banner is kept short (model, directory, session); `/status` shows
+the rest: host, how full the context is, sandbox, reviewer and permission settings. Stdlib only.
 
 Every conversation is saved after each message to `~/.local/share/nanoharness/sessions/`
 (one `0600` JSON file each; outside the project so the agent's tools can't touch it). A

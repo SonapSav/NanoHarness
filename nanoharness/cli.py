@@ -4,7 +4,7 @@ import sys
 import threading
 import time
 
-from . import config, sandbox, session, tui, ui
+from . import config, context, sandbox, session, tui, ui
 from .agent import Agent
 from .client import ModelError
 from .permissions import Permissions
@@ -19,7 +19,7 @@ BANNER = """\033[1mNanoHarness\033[0m
   sandbox  {sandbox}{yolo}
 
   /exit  quit      /reset  new session      /sessions  list saved      /resume [n|id]  switch to one
-  /messages  dump raw history                 (at startup: -c resumes the latest, --resume picks)
+  /status  model, host, context, sandbox      /messages  dump raw history
 """
 
 
@@ -96,6 +96,9 @@ def main(argv=None):
             continue
         if user_input == "/resume" or user_input.startswith("/resume "):
             agent = switch_session(agent, user_input[len("/resume"):].strip())
+            continue
+        if user_input == "/status":
+            print(status(agent, args.yolo))
             continue
         if user_input == "/messages":
             import json
@@ -219,8 +222,7 @@ class StreamPrinter:
 
 
 def rich_banner(session_id, yolo):
-    rows = [("model", config.MODEL), ("host", config.OLLAMA_HOST), ("workdir", str(config.WORKDIR)),
-            ("session", session_id), ("sandbox", strip_ansi(sandbox_line()))]
+    rows = [("model", config.MODEL), ("workdir", str(config.WORKDIR)), ("session", session_id)]
     if yolo:
         rows.append(("yolo", "permissions disabled"))
     inner = max(len(f"{k:<8} {v}") for k, v in rows) + 2
@@ -230,9 +232,21 @@ def rich_banner(session_id, yolo):
             f"\033[38;5;208m│\033[0m \033[31m{k:<8} {v:<{inner - 11}}\033[0m \033[38;5;208m│\033[0m"
             for k, v in rows]
     bottom = f"\033[38;5;208m╰{'─' * inner}╯\033[0m"
-    help_line = ("\033[90m  /exit · /reset · /sessions · /resume [n|id] · /messages   "
-                 "(startup: -c latest, --resume pick)\033[0m\n")
+    help_line = "\033[90m  /exit · /reset · /sessions · /resume [n|id] · /status · /messages\033[0m\n"
     return "\n".join([top, *body, bottom, help_line])
+
+
+def status(agent, yolo):
+    """/status: what the banner leaves out, and how full the context is right now."""
+    used = context.estimate_tokens(agent.messages)
+    rows = [("model", config.MODEL), ("host", config.OLLAMA_HOST), ("workdir", str(config.WORKDIR)),
+            ("context", f"~{used:,} of {config.NUM_CTX:,} tokens ({100 * used // config.NUM_CTX}%), "
+                        f"compacts at {int(config.COMPACT_AT * 100)}%"),
+            ("session", agent.session.id if agent.session else "-"),
+            ("sandbox", sandbox_line()),
+            ("review", "on" if config.REVIEW else "off (NANO_REVIEW=0)"),
+            ("yolo", "\033[31mpermissions disabled\033[0m" if yolo else "off")]
+    return "\n".join(f"  \033[90m{k:<8}\033[0m {v}" for k, v in rows) + "\n"
 
 
 def strip_ansi(text):

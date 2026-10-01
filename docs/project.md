@@ -87,7 +87,9 @@ errors red); edits show a coloured diff once, at the permission prompt or under 
 `--yolo`; subagent calls nest as `⎿ ↳ Grep(...)`; answers stream line by line with light markdown
 (headings, bullets, `code`, **bold**, fenced code) and wrap at the terminal width so the live line
 never wraps; the spinner also covers running tools (`Running Bash… 4s`), closing the gap above.
-↑/↓ recall input across runs (`readline`, history next to the sessions). Checked live in a
+↑/↓ recall input across runs (`readline`, history next to the sessions). The banner shows only
+model, workdir and session; `/status` (both modes) adds host, context used (estimated, against
+`num_ctx` and the compaction threshold), sandbox, reviewer and yolo. Checked live in a
 pseudo-terminal, with and without `--yolo`. Not done (phase 2): a bordered input box and a status
 footer that stay at the bottom while output scrolls, Esc to interrupt, arrow-key permission menus,
 multi-line input; phase 3: `/` completion, expanding a folded result.

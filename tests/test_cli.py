@@ -106,3 +106,16 @@ def test_the_repl_stops_the_status_line_when_a_turn_fails(run, monkeypatch):
     monkeypatch.setattr(cli.StreamPrinter, "stop", lambda self: (stopped.append(1), real(self)))
     out = run(["hello"], ModelError("down"))
     assert stopped and "down" in out
+
+
+def test_status_shows_what_the_banner_leaves_out(run):
+    out = run(["/status"])
+    for key in ("host", "sandbox", "context", "review", "yolo"):
+        assert f"{key:<8}" in out
+    assert config.OLLAMA_HOST in out and "tokens" in out
+
+
+def test_rich_banner_is_short():
+    banner = cli.rich_banner("20261001-000000", yolo=False)
+    assert config.MODEL in banner and "20261001-000000" in banner and "/status" in banner
+    assert config.OLLAMA_HOST not in banner and "sandbox" not in banner and "startup" not in banner
