@@ -71,3 +71,38 @@ def test_stop_message_is_printed_even_when_streaming(run, monkeypatch):
                          "tool_calls": [{"function": {"name": "read_file",
                                                       "arguments": {"path": "x"}}}]})
     assert "stopped after 1 tool rounds" in out
+
+
+def test_status_line_shows_only_while_a_reply_is_open_and_quiet(capsys):
+    """Seen live: 14 s with nothing on screen while the model wrote a tool call."""
+    p = cli.StreamPrinter(ticker=False)
+    assert p.status_text() is None                       # no reply open
+    p("start", "")
+    t = p.quiet_since
+    assert p.status_text(t + 0.5) is None                # not quiet long enough
+    assert "waiting for the model · 3s" in p.status_text(t + 3.2)
+    p("content", "I'll write it. ")
+    t = p.quiet_since
+    assert "working · 12s" in p.status_text(t + 12.1)    # text came, then silence
+    p("end", "")
+    assert p.status_text(t + 30) is None                 # closed: a permission prompt may follow
+    assert p.last == "I'll write it."
+
+
+def test_status_line_is_cleared_when_tokens_resume_or_the_turn_stops(capsys):
+    p = cli.StreamPrinter(ticker=False)
+    p("start", "")
+    p.status = True                                      # as if the ticker had drawn it
+    p("thinking", "hmm")
+    assert not p.status and "\r\033[2K" in capsys.readouterr().out
+    p.status = True
+    p.stop()
+    assert not p.status and not p.open and p.status_text() is None
+
+
+def test_the_repl_stops_the_status_line_when_a_turn_fails(run, monkeypatch):
+    stopped = []
+    real = cli.StreamPrinter.stop
+    monkeypatch.setattr(cli.StreamPrinter, "stop", lambda self: (stopped.append(1), real(self)))
+    out = run(["hello"], ModelError("down"))
+    assert stopped and "down" in out

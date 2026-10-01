@@ -68,7 +68,12 @@ carried on correctly.
 
 **Streaming** (`client.py`). Replies print as they are generated; reasoning streams in italic grey. Measured
 live: first text after 0.18 s on a reply that took 26 s in total. Mid-stream errors, truncated
-streams and dropped connections all surface as the usual model error.
+streams and dropped connections all surface as the usual model error. Ollama sends nothing while
+the model writes a tool call (measured: 14 s of silence before a 60-line `write_file` arrived whole)
+or reads a long prompt, which looked like a hang. So in a terminal, while a reply is open and nothing
+has come for a second, a grey status line counts in place (`⠋ working · 12s`, or `waiting for the
+model` before the first token) and clears when anything arrives or the reply ends. Not covered: a
+long `bash` command or a subagent, which run after the reply ends.
 
 **`grep` / `glob`** (`tools.py`). Pure Python, read-only (no prompts), skipping `.git`, `.venv`,
 `node_modules`, caches and binary files, and never following a symlink out of `WORKDIR`. Tool

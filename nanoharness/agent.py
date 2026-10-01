@@ -32,7 +32,8 @@ class Agent:
         self.session = session   # saved after every message when set
         # Originals of what compaction summarized, for search_history; saved with the session.
         self.archive = list(getattr(session, "archive", None) or [])
-        # on_token(kind, text) shows the reply as it streams; kind "end" closes each reply.
+        # on_token(kind, text) shows the reply as it streams; kind "start" opens each reply
+        # (before the request is sent), "end" closes it.
         self.on_token = on_token
         self.dropped_input = False   # did the last failed turn discard the user's message?
         # For review.py, per turn: files as they were before this turn first wrote them (None =
@@ -164,6 +165,8 @@ class Agent:
                                               archive=self.archive)
             if note:
                 print(f"\033[90m{indent}({note})\033[0m")
+            if self.on_token:
+                self.on_token("start", "")
             reply = client.chat(self.messages, schemas(self.available()), on_token=self.on_token)
             if self.on_token:
                 self.on_token("end", "")

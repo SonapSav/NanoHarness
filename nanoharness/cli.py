@@ -1,6 +1,8 @@
 """Deliberately dumb REPL. Read a line, run a turn, print the answer."""
 import argparse
 import sys
+import threading
+import time
 
 from . import config, sandbox, session
 from .agent import Agent
@@ -85,7 +87,11 @@ def main(argv=None):
         if printer:
             printer.reset()
         try:
-            answer = agent.turn(user_input)
+            try:
+                answer = agent.turn(user_input)
+            finally:
+                if printer:
+                    printer.stop()
             if printer is None or answer != printer.last:  # e.g. "(stopped after ...)"
                 print(answer)
             print()
@@ -101,36 +107,97 @@ def main(argv=None):
 
 class StreamPrinter:
     """Shows a reply as it streams: thinking in italic grey, the answer in plain text.
-    Remembers the last complete reply so the REPL does not print it twice."""
+    Remembers the last complete reply so the REPL does not print it twice.
 
-    def __init__(self):
+    Ollama sends nothing while the model writes a tool call (measured: 14 s of silence for a
+    60-line write_file, then the whole call at once), nor while it reads a long prompt. So
+    while a reply is open and nothing has arrived for a second, a grey status line shows a
+    spinner and the time; it goes as soon as anything arrives or the reply ends."""
+
+    SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    QUIET = 1.0     # seconds of silence before the status line appears
+
+    def __init__(self, ticker=None):
+        self.lock = threading.RLock()
         self.reset()
+        if sys.stdout.isatty() if ticker is None else ticker:
+            threading.Thread(target=self._tick, daemon=True).start()
 
     def reset(self):
-        self.kind = None   # what is mid-line right now: "thinking", "content" or None
-        self.parts = []
-        self.last = None
+        with self.lock:
+            self.kind = None   # what is mid-line right now: "thinking", "content" or None
+            self.parts = []
+            self.last = None
+            self.open = False      # between "start" and "end": a reply is on its way
+            self.quiet_since = None
+            self.seen = False      # has this reply sent anything yet?
+            self.status = False    # is the status line on screen?
 
     def break_line(self):
-        if self.kind:
-            print()
-        self.kind = None
+        with self.lock:
+            self._clear_status()
+            if self.kind:
+                print()
+            self.kind = None
+
+    def stop(self):
+        """The turn is over (answered, failed or interrupted): no status line from here."""
+        with self.lock:
+            self.open = False
+            self._clear_status()
 
     def __call__(self, kind, text):
-        if kind == "end":
-            self.break_line()
-            self.last = "".join(self.parts).strip()
-            self.parts = []
-            return
-        if self.kind and kind != self.kind:
-            print()   # thinking is over; the answer starts on its own line
-        self.kind = kind
-        if kind == "thinking":
-            text = f"\033[3;90m{text}\033[0m"   # italic grey: apart from the harness's grey notes
-        else:
-            self.parts.append(text)
-        sys.stdout.write(text)
-        sys.stdout.flush()
+        with self.lock:
+            if kind == "start":
+                self.open, self.quiet_since, self.seen = True, time.monotonic(), False
+                return
+            self._clear_status()
+            if kind == "end":
+                self.open = False
+                self.break_line()
+                self.last = "".join(self.parts).strip()
+                self.parts = []
+                return
+            self.quiet_since, self.seen = time.monotonic(), True
+            if self.kind and kind != self.kind:
+                print()   # thinking is over; the answer starts on its own line
+            self.kind = kind
+            if kind == "thinking":
+                text = f"\033[3;90m{text}\033[0m"   # italic grey: apart from the harness's grey notes
+            else:
+                self.parts.append(text)
+            sys.stdout.write(text)
+            sys.stdout.flush()
+
+    def status_text(self, now=None):
+        """The status line for now, or None when it shouldn't show."""
+        if not self.open or self.quiet_since is None:
+            return None
+        quiet = (now or time.monotonic()) - self.quiet_since
+        if quiet < self.QUIET:
+            return None
+        spin = self.SPIN[int(quiet * 8) % len(self.SPIN)]
+        return f"{spin} {'working' if self.seen else 'waiting for the model'} · {int(quiet)}s"
+
+    def _tick(self):
+        while True:
+            time.sleep(0.125)
+            with self.lock:
+                line = self.status_text()
+                if line is None:
+                    continue
+                if self.kind:          # mid-line: the status line goes on a line of its own
+                    print()
+                    self.kind = None
+                sys.stdout.write(f"\r\033[2K\033[90m  {line}\033[0m")
+                sys.stdout.flush()
+                self.status = True
+
+    def _clear_status(self):
+        if self.status:
+            sys.stdout.write("\r\033[2K")
+            sys.stdout.flush()
+            self.status = False
 
 
 def sandbox_line():
