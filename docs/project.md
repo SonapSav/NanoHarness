@@ -108,7 +108,9 @@ the message. Multi-line input with Alt+Enter or Ctrl+J, and bracketed paste (a p
 message). Permission prompts and the `/resume` picker are arrow-key menus. Everything else printed
 goes through a stdout proxy into scrollback above the box; the terminal is restored on any exit.
 `bash` commands now get `/dev/null` as stdin: before, one that read input waited on the user's
-terminal until the timeout (and would have stolen keys from the box). Falls back to phase 1's line
+terminal until the timeout (and would have stolen keys from the box). Checked live at `ee0d521` on
+the `bash`-heavy cases, 10 runs each, both servers: edit group 40/40, `venv_install` 10/10,
+`actually_runs_command` 10/10 (`evals/results/live-ee0d521-*.json`). Falls back to phase 1's line
 input if the terminal can't do this. Caught by a test before use: the permission menu mapped its
 options in the wrong order, so "No" answered "always". Checked live in a pseudo-terminal with raw
 keystrokes: typing and Enter, both menus, a two-line paste, Esc mid-answer, `/status`, Ctrl-D.
@@ -532,7 +534,8 @@ Recommended or noticed while adding `--hosts`, not done yet:
 - **Slow PyPI breaks `venv_install`** (6/10 at `fc2f347`): `pip install` hits the 60 s bash
   timeout, and after a few the agent reaches for `apt-get` or `--user`, against its rules. Options:
   a longer timeout for installs, or a pip cache or mirror on the machine running the harness.
-  Worth doing only if it keeps happening; check the network first.
+  Worth doing only if it keeps happening. The next day it was 10/10 at ~20 s a run (124 s at the
+  baseline) with nothing relevant changed: the network, as suspected.
 - **Reviewer false alarms concentrate in the compaction cases**: 3 of 20 passing compaction runs at
   `fc2f347`, always about the probe route ("hardcodes success", "not registered"). The cause is
   known (the reviewer doesn't know `app.py` discovers routes) and the fix tried didn't work (see
