@@ -285,3 +285,10 @@ def test_each_permission_option_gives_its_own_answer(tmp_path, monkeypatch):
         u.handle_key(Key("char", key))
         t.join(2)
         assert box["v"] == want
+
+
+def test_footer_never_overflows_a_narrow_terminal():
+    for width in (40, 60, 80, 120):
+        u, _ = live(width=width)
+        u.footer = "~/Development/some-project · aeroadvisor-agent:latest · ctx 3%"
+        assert len(bare(u.region())[-1]) <= width - 1

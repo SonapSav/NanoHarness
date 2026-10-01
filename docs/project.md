@@ -100,7 +100,7 @@ pseudo-terminal, with and without `--yolo`.
 
 **Terminal UI, phase 2** (`LiveUI` in `tui.py`, `keys.py`). A bottom area that stays put while the
 conversation scrolls into scrollback: the spinner or the answer line being written, a bordered input
-box, and a footer (model, context used, key hints). The terminal runs key-at-a-time with no echo
+box, and a footer (directory, model, context used, key hints; the hints give way on a narrow terminal). The terminal runs key-at-a-time with no echo
 and no signal keys (`termios`), so Ctrl-C and Esc are keys the UI interprets: during a turn they
 send the process a real SIGINT (it breaks a blocked network read), otherwise Ctrl-C clears the box
 and twice exits. A reader thread handles keys while the agent works, so Enter during a turn queues

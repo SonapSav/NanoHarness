@@ -600,7 +600,10 @@ class LiveUI(RichUI):
         else:
             hint = "enter send · ctrl-d exit"
         left = f"  {self.footer}"
-        gap = max(2, width - visible(left) - len(hint) - 1)
+        if visible(left) + len(hint) + 3 > width:    # a wrapped footer would break the redraw:
+            hint = ""                                # the hints give way first, then the left
+            left = left if visible(left) < width else left[:width - 2] + "…"
+        gap = max(2, width - visible(left) - len(hint) - 1) if hint else 0
         return f"{GREY}{left}{' ' * gap}{hint}{RESET}"
 
     # --- keys ----------------------------------------------------------------------------

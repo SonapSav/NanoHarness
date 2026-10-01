@@ -269,11 +269,7 @@ def rich_banner(session_id, yolo, columns=None):
         title = f"NanoHarness v{version('nanoharness')}"
     except PackageNotFoundError:
         title = "NanoHarness"
-    home = str(Path.home())
-    workdir = str(config.WORKDIR)
-    workdir = "~" + workdir[len(home):] if workdir.startswith(home) else workdir
-    if len(workdir) > 40:                       # keep the end: the project is what matters
-        workdir = "…" + workdir[-39:]
+    workdir = short_path(config.WORKDIR, 40)
     info = [f"{banner.ORANGE}{banner.BOLD}{config.MODEL}{banner.RESET}",
             f"{banner.GREY}{workdir}{banner.RESET}",
             f"{banner.GREY}session {session_id}{banner.RESET}"]
@@ -369,10 +365,17 @@ def save_live_history(live):
         pass
 
 
+def short_path(path, limit):
+    """~ for the home directory; past `limit`, cut from the left: the project is at the end."""
+    home, text = str(Path.home()), str(path)
+    text = "~" + text[len(home):] if text == home or text.startswith(home + "/") else text
+    return text if len(text) <= limit else "…" + text[-(limit - 1):]
+
+
 def footer(agent):
-    """The footer's left side: model and how full the context is."""
+    """The footer's left side: where, which model, how full the context is."""
     used = context.estimate_tokens(agent.messages)
-    return f"{config.MODEL} · ctx {100 * used // config.NUM_CTX}%"
+    return f"{short_path(config.WORKDIR, 32)} · {config.MODEL} · ctx {100 * used // config.NUM_CTX}%"
 
 
 def input_history():

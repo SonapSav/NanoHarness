@@ -137,3 +137,13 @@ def test_rich_banner_fits_a_narrow_terminal(monkeypatch, tmp_path):
 def test_help_lists_commands_and_keys_only_with_the_box(run):
     out = run(["/help"])
     assert "/resume [n|id]" in out and "/status" in out and "Keys" not in out   # plain: no box
+
+
+def test_footer_starts_with_the_directory(monkeypatch, tmp_path):
+    from pathlib import Path
+    monkeypatch.setattr(config, "WORKDIR", Path.home() / "Development" / "testllm")
+    agent = cli.Agent()
+    assert cli.footer(agent).startswith(f"~/Development/testllm · {config.MODEL} · ctx ")
+    monkeypatch.setattr(config, "WORKDIR", tmp_path / ("x" * 60) / "proj")
+    left = cli.footer(cli.Agent())
+    assert left.startswith("…") and left.split(" · ")[0].endswith("/proj") and len(left.split(" · ")[0]) == 32
