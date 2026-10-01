@@ -168,3 +168,17 @@ def test_footer_shows_the_last_turn_in_ms(run, monkeypatch):
     args = cli.parse_args([])
     agent = cli.step(cli.Agent(), None, None, args, "hello")
     assert isinstance(agent.last_turn_ms, int) and agent.last_turn_ms >= 0
+
+
+def test_every_listed_command_is_handled_and_counted(monkeypatch):
+    """The panel's count comes from COMMANDS; none of them may reach the model as a message."""
+    def model(*a, **k):
+        raise AssertionError("a command was sent to the model")
+    monkeypatch.setattr(client, "chat", model)
+    monkeypatch.setattr("builtins.input", lambda *a: "")         # /resume's picker: stay
+    args = cli.parse_args([])
+    for usage, _ in cli.COMMANDS:
+        name = usage.split()[0]
+        cli.step(cli.Agent(session=cli.Session()), None, None, args, name)   # as the REPL has
+    text = re.sub(r"\x1b\[[0-9;]*m", "", cli.rich_banner("x", False, columns=120))
+    assert f"8 tools · {len(cli.COMMANDS)} commands · /help for commands" in text

@@ -289,22 +289,23 @@ def rich_banner(session_id, yolo, columns=None):
               ("permissions", "!none asked (--yolo)" if yolo else "asked before anything writes"),
               ("review", "on" if config.REVIEW else "off")]
     sections = [("Tools", tool_rows), ("Safety", safety),
-                (None, f"{len(tools.REGISTRY)} tools · /help for commands")]
+                (None, f"{len(tools.REGISTRY)} tools · {len(COMMANDS)} commands · /help for commands")]
     columns = columns or shutil.get_terminal_size((100, 24)).columns
     return "\n".join(banner.panel(title, info, sections, banner.load_logo(config.LOGO), columns)) + "\n"
 
 
-HELP = """\
-  \033[1mCommands\033[0m
-  /help              this
-  /status            model, host, context used, sandbox, reviewer
-  /sessions          saved sessions in this directory, numbered
-  /resume [n|id]     switch to one (no argument: pick from a list)
-  /reset             start a new session (the old one stays saved)
-  /note <text>       keep a remark about this session (for fixing things later)
-  /messages          the raw history, as sent to the model
-  /exit              quit (also Ctrl+D)
-"""
+# One list: /help is built from it and the startup panel counts it.
+COMMANDS = [
+    ("/help", "this"),
+    ("/status", "model, host, context used, sandbox, reviewer"),
+    ("/sessions", "saved sessions in this directory, numbered"),
+    ("/resume [n|id]", "switch to one (no argument: pick from a list)"),
+    ("/reset", "start a new session (the old one stays saved)"),
+    ("/note <text>", "keep a remark about this session (for fixing things later)"),
+    ("/messages", "the raw history, as sent to the model"),
+    ("/exit", "quit (also Ctrl+D)"),
+]
+HELP = "  \033[1mCommands\033[0m\n" + "".join(f"  {usage:<18} {what}\n" for usage, what in COMMANDS)
 
 KEYS_HELP = """\
   \033[1mKeys\033[0m
