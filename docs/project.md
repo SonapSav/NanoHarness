@@ -288,16 +288,18 @@ Recommended or noticed while adding `--hosts`, not done yet:
   **Not done: retrying** a stalled run on the other server. Reporting was enough to stop stalls
   lowering pass rates; a retry would also hide a flaky server, and each run starts fresh, so
   rerunning a case by hand is easy.
-- **Measure whether subagents on the second server keep the main cache warm.** The main agent waits
-  for a subagent either way, so there is no direct speedup. But if Ollama keeps one cached prompt per
-  model, a subagent on the same server replaces the main history's cache, and it must be
-  reprocessed afterwards (10k+ tokens). Compare time to first token after a `task` call with one and
-  two servers before building anything. Compaction summaries could move to the second server the
-  same way. **The reviewer too**, and it matters more: it runs after every turn that changed a
-  file, so in a long session it may evict the main cache after most turns. Evals can't show this
-  (each run is one turn, there is no next turn to pay for it). Measure in a multi-turn session:
-  time from sending a message to the first token of the reply, with `NANO_REVIEW` on and off.
-  In real use everything goes to one server (`OLLAMA_HOST`); only the eval runner uses two.
+- ~~**Measure whether side calls evict the main cache**~~ (subagents, compaction summaries, the
+  reviewer). Measured, they don't. The worry: if Ollama kept one cached prompt per model, a side
+  call would replace the main conversation's cache and the next turn would reprocess it all;
+  evals can't show that (one turn per run). `evals/cache_probe.py` sends a ~25k-token main
+  prompt, three unrelated ~11k-token side calls, then the main prompt plus a turn, and reads
+  Ollama's `prompt_eval_duration` (`prompt_eval_count` always reports the full prompt, so the
+  duration is the signal). Both servers: main cold 16.0 s / 15.1 s, each side call ~6.5 s, the
+  next main turn **0.35 s / 0.09 s, still cached**. Both keep more than one cache slot. So the
+  reviewer's cost is only its own call, as the evals measured, and moving side calls to the second
+  server isn't needed for the cache. In real use everything goes to one server (`OLLAMA_HOST`);
+  only the eval runner uses two. **Rerun the probe after changing either server's Ollama setup or
+  version**: fewer slots would bring the problem back.
 - **Parallel subagents**: only useful once the model sends several `task` calls in one reply, which
   it doesn't yet.
 
