@@ -187,9 +187,9 @@ def test_every_listed_command_is_handled_and_counted(monkeypatch):
 def test_footer_shows_the_last_turns_tokens(monkeypatch):
     agent = cli.Agent()
     agent.last_turn_ms, agent.last_turn_tokens = 900, (23410, 1191)
-    assert cli.footer(agent).endswith(" · 900 ms · ↑23.4k ↓1.2k")
+    assert cli.footer(agent).endswith(" · 900 ms · ↑ 23.4k ↓ 1.2k")
     agent.last_turn_tokens = (512, 40)
-    assert cli.footer(agent).endswith(" · ↑512 ↓40")
+    assert cli.footer(agent).endswith(" · ↑ 512 ↓ 40")
 
 
 def test_a_turn_records_every_model_call_it_made(monkeypatch):

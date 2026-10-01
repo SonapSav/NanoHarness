@@ -444,7 +444,7 @@ def footer(agent):
         text += f" · {last:,} ms"
     tokens = getattr(agent, "last_turn_tokens", None)
     if tokens:
-        text += f" · ↑{compact(tokens[0])} ↓{compact(tokens[1])}"      # ↑ sent in, ↓ came out
+        text += f" · ↑ {compact(tokens[0])} ↓ {compact(tokens[1])}"    # ↑ sent in, ↓ came out
     return text
 
 
