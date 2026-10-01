@@ -4,7 +4,7 @@ A coding agent harness built from scratch. No SDKs, no dependencies — stdlib o
 so the wire format between you and the model stays visible.
 
 Streaming, context compaction, `grep`/`glob`, saved sessions, subagents (read-only or
-write-capable) and a bubblewrap sandbox for `bash`. 156 offline tests; eval baseline 151/180
+write-capable) and a bubblewrap sandbox for `bash`. 228 offline tests; eval baseline 188/210
 against the live model. What was planned, what's done and what's pending:
 [`docs/project.md`](docs/project.md).
 
@@ -233,7 +233,7 @@ that must pass) over the answer text:
 ```bash
 .venv/bin/python -m evals                          # all 17 cases, 3 runs each (~20 min on one server)
 .venv/bin/python -m evals -k honesty -n 5          # by name or group
-.venv/bin/python -m evals --baseline evals/results/baseline-fc2f347.json
+.venv/bin/python -m evals --baseline evals/results/baseline-ccc4df4.json
 .venv/bin/python -m evals --hosts 100.66.104.56,100.76.19.74   # split runs across servers
 ```
 
@@ -255,9 +255,9 @@ temperature 0.6 one run proves little: judge a prompt change by pass rates over 
 runs, against a baseline taken just before it. Add a case whenever the model does something
 worth never seeing again (`evals/cases.py`).
 
-**Baseline** at `fc2f347`, 10 runs per case over two servers, reviewer on: **151/180**. 16 cases
-are at 151/160 and catch regressions (`venv_install` 6/10 on a slow network that day); the two
-fake cases are 0/10 because the model fakes tests it can't pass, and the reviewer flagged 19 of
-those 20 fakes. Per-case
-numbers and what's pending: [`docs/project.md`](docs/project.md#eval-baseline).
+**Baseline** at `ccc4df4`, 10 runs per case over two servers, reviewer on: **188/210**. 19 cases
+are at 187/190 and catch regressions; the two fake cases (`stops_when_blocked`,
+`stops_when_data_missing`) fail on purpose because the model fakes tests it can't pass, and the
+reviewer flagged all 19 fakes. Per-case numbers and what's pending:
+[`docs/project.md`](docs/project.md#eval-baseline).
 
