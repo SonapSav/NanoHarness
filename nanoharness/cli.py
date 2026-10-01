@@ -16,7 +16,8 @@ BANNER = """\033[1mNanoHarness\033[0m
   session  {session}
   sandbox  {sandbox}{yolo}
 
-  /exit  quit      /reset  new session      /sessions  list saved      /messages  dump raw history
+  /exit  quit      /reset  new session      /sessions  list saved      /resume [n|id]  switch to one
+  /messages  dump raw history                 (at startup: -c resumes the latest, --resume picks)
 """
 
 
@@ -71,7 +72,10 @@ def main(argv=None):
             print(f"new session {agent.session.id} (the old one stays saved)")
             continue
         if user_input == "/sessions":
-            print(format_sessions(session.list_sessions(), current=agent.session.id))
+            print(format_sessions(session.list_sessions(), numbered=True, current=agent.session.id))
+            continue
+        if user_input == "/resume" or user_input.startswith("/resume "):
+            agent = switch_session(agent, user_input[len("/resume"):].strip())
             continue
         if user_input == "/messages":
             import json
@@ -148,20 +152,45 @@ def start_session(args):
     return Session(), None
 
 
-def pick_session():
+def pick_session(current=None, none_means="a new session"):
     sessions = session.list_sessions()
     if not sessions:
-        print("no saved sessions for this directory; starting a new one")
+        print("no saved sessions for this directory" + ("; starting a new one" if current is None else ""))
         return None
-    print(format_sessions(sessions, numbered=True))
+    print(format_sessions(sessions, numbered=True, current=current))
     try:
-        choice = input("resume which? [number or id, enter for a new session] ").strip()
+        choice = input(f"resume which? [number or id, enter for {none_means}] ").strip()
     except (EOFError, KeyboardInterrupt):
         print()
         return None
+    return chosen(choice, sessions)
+
+
+def chosen(choice, sessions):
+    """A number from the list (1 = newest) or a session id; None for nothing."""
     if choice.isdigit() and 1 <= int(choice) <= len(sessions):
         return sessions[int(choice) - 1]["id"]
     return choice or None
+
+
+def switch_session(agent, choice):
+    """/resume: the agent on another saved session, or the same agent if that fails.
+    The current one is already saved (after every message), so leaving it loses nothing."""
+    current = agent.session.id
+    id = chosen(choice, session.list_sessions()) if choice else pick_session(current, "staying here")
+    if not id or id == current:
+        print(f"staying in session {current}")
+        return agent
+    try:
+        sess, history = session.load(id)
+    except SessionError as e:
+        print(f"\033[31m{e}\033[0m")
+        return agent
+    # Same permissions, so an [a]lways answer and --yolo carry over.
+    new = Agent(agent.permissions, agent.on_token, session=sess, messages=history)
+    print(f"\033[90mresumed {sess.id} · {len(history)} messages · last request: "
+          f"{last_request(history)!r}\033[0m\n")
+    return new
 
 
 def format_sessions(sessions, numbered=False, current=None):
@@ -169,7 +198,8 @@ def format_sessions(sessions, numbered=False, current=None):
         return "no saved sessions for this directory"
     rows = []
     for n, s in enumerate(sessions, start=1):
-        mark = f"{n:>3}  " if numbered else ("  * " if s["id"] == current else "    ")
+        star = "*" if s["id"] == current else " "
+        mark = f"{n:>3}{star} " if numbered else f"  {star} "
         rows.append(f"{mark}{s['id']:<18} {s['updated'].replace('T', ' ')}  "
                     f"{s['messages']:>4} msgs  {s['title']}")
     return "\n".join(rows)

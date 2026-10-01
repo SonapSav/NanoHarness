@@ -185,3 +185,47 @@ def test_sessions_saved_without_an_archive_still_load():
     assert "archive" not in saved(s)
     sess, _ = session.load(s.id)
     assert Agent(session=sess).archive == []
+
+
+def two_saved():
+    """As real saves are: the system prompt first (resuming swaps in today's)."""
+    system = {"role": "system", "content": "old prompt"}
+    Session("20260101-000000").save([system, {"role": "user", "content": "older"}])
+    Session("20260102-000000").save([system, {"role": "user", "content": "newer"}])
+
+
+def test_slash_resume_by_number_switches_and_keeps_the_history(monkeypatch, capsys):
+    two_saved()
+    seen = script(monkeypatch, answer("ok"))
+    code, out = run_cli(monkeypatch, capsys, [], ["/sessions", "/resume 2", "and now?"])
+    assert "  2  20260101-000000" in out and "resumed 20260101-000000" in out
+    assert [m["content"] for m in seen[-1] if m["role"] == "user"] == ["older", "and now?"]
+
+
+def test_slash_resume_by_id_and_the_picker(monkeypatch, capsys):
+    two_saved()
+    script(monkeypatch)
+    code, out = run_cli(monkeypatch, capsys, [], ["/resume 20260102-000000"])
+    assert "resumed 20260102-000000" in out and "'newer'" in out
+    code, out = run_cli(monkeypatch, capsys, [], ["/resume", "2"])
+    assert "  2  20260101-000000" in out and "resumed 20260101-000000" in out   # list, then pick
+
+
+def test_slash_resume_unknown_or_empty_choice_stays(monkeypatch, capsys):
+    two_saved()
+    seen = script(monkeypatch, answer("ok"))
+    code, out = run_cli(monkeypatch, capsys, [], ["/resume nope", "/resume", "", "hi"])
+    assert "no session 'nope'" in out and out.count("staying in session") == 1
+    assert [m["content"] for m in seen[-1] if m["role"] == "user"] == ["hi"]   # still fresh
+
+
+def test_slash_resume_keeps_permissions(monkeypatch, capsys):
+    """An [a]lways answer given before the switch still holds after it."""
+    two_saved()
+    from nanoharness.agent import Agent as RealAgent
+    made = []
+    monkeypatch.setattr(cli, "Agent", lambda *a, **k: made.append(RealAgent(*a, **k)) or made[-1])
+    script(monkeypatch)
+    run_cli(monkeypatch, capsys, [], ["/resume 1"])
+    assert len(made) == 2 and made[1].permissions is made[0].permissions
+    assert made[1].session.id == "20260102-000000"

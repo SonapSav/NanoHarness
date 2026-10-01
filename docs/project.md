@@ -78,7 +78,9 @@ descriptions steer the model to them: in live runs, content searches went throug
 **Session persistence** (`session.py`). Every message is saved atomically to a `0600` JSON file in
 `~/.local/share/nanoharness/sessions/`, outside the project so the agent's own tools can't touch it.
 `nanoharness -c` continues the latest session for the current directory; `--resume` picks from a list.
-`[a]lways` approvals are deliberately not saved. Verified live: a resumed session recalled a codeword
+Inside the REPL, `/resume [n|id]` switches to another saved session (the current one is already
+saved; `/sessions` is numbered for it; an unknown id leaves you where you were). `[a]lways`
+approvals are deliberately not saved: they last for the running REPL, across `/reset` and `/resume`. Verified live: a resumed session recalled a codeword
 stored in the previous one.
 
 **Subagents** (`subagent.py`, the `task` tool). A fresh agent with its own history; only its final

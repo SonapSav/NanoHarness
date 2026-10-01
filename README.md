@@ -32,7 +32,9 @@ nanoharness --resume     # pick a saved session from a list (or --resume ID)
 Every conversation is saved after each message to `~/.local/share/nanoharness/sessions/`
 (one `0600` JSON file each; outside the project so the agent's tools can't touch it). A
 session resumes only in the directory it started in, with today's system prompt. `[a]lways`
-approvals are deliberately not saved. `/sessions` lists them, `/reset` starts a new one.
+approvals are deliberately not saved: they last for the running REPL (across `/reset` and
+`/resume`), never into a later one. In the REPL, `/sessions` lists them numbered, `/resume 2` (or
+`/resume <id>`, or `/resume` for a picker) switches to one, and `/reset` starts a new one.
 Nothing cleans old sessions up; delete the files when you like. When compaction summarizes
 earlier turns, the originals are kept in the session file too, and the agent gets a
 `search_history` tool to look details up in them.
