@@ -127,7 +127,7 @@ shows it (`✻ Checking the changes… 12s · esc to skip`), and Esc or Ctrl-C d
 review (`(review skipped)`), not the turn. Same scenario after the fix: no gap over 0.3 s between
 the answer and the box.
 
-**Tokens per turn in the footer** (`23.4k in / 1.2k out`). Summed from Ollama's
+**Tokens per turn in the footer** (`↑23.4k ↓1.2k`: ↑ in, ↓ out). Summed from Ollama's
 `prompt_eval_count` and `eval_count` on the last line of every reply in the turn: the agent's
 replies, subagents, compaction summaries and the review. "In" is the whole prompt each time, as
 Ollama reports it even when cached, so a turn with three tool calls counts the history about four
