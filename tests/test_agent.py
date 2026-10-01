@@ -196,3 +196,12 @@ def test_review_sees_every_call_and_files_changed_by_commands(agent, monkeypatch
     prompt = seen[-1][0]["content"]
     assert "read_file(path='missing.py') -> Error" in prompt
     assert "Also changed by commands (contents not shown): db.py" in prompt
+
+
+def test_interrupting_the_review_skips_it_and_keeps_the_turn(agent, monkeypatch, capsys):
+    monkeypatch.setattr(config, "REVIEW", True)
+    script(monkeypatch,
+           reply("", tool_call("write_file", path="a.txt", content="x")),
+           reply("Done."), KeyboardInterrupt())
+    assert agent.turn("write a.txt") == "Done."
+    assert agent.verdict is None and "review skipped" in capsys.readouterr().out

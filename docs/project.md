@@ -118,6 +118,15 @@ input if the terminal can't do this. Caught by a test before use: the permission
 options in the wrong order, so "No" answered "always". Checked live in a pseudo-terminal with raw
 keystrokes: typing and Enter, both menus, a two-line paste, Esc mid-answer, `/status`, Ctrl-D.
 
+**"It hangs after the script runs": the reviewer, unseen.** Reported from real use. The saved
+sessions showed every script run finishing and the answer written, so the wait came after the
+answer. Reproduced in a pseudo-terminal with output timing (an edit and a run, as in the report):
+the answer finished at 28.3 s and the input box came back at 45.6 s, 17 s with nothing on screen
+while the reviewer (a model call with reasoning) checked the edits and found nothing. Now a spinner
+shows it (`✻ Checking the changes… 12s · esc to skip`), and Esc or Ctrl-C during it skips only the
+review (`(review skipped)`), not the turn. Same scenario after the fix: no gap over 0.3 s between
+the answer and the box.
+
 **`grep` / `glob`** (`tools.py`). Pure Python, read-only (no prompts), skipping `.git`, `.venv`,
 `node_modules`, caches and binary files, and never following a symlink out of `WORKDIR`. Tool
 descriptions steer the model to them: in live runs, content searches went through `grep` 4/4 and
@@ -733,6 +742,9 @@ Recommended or noticed while adding `--hosts`, not done yet:
   edge can shift on lines that contain them.
 - **Not tried in tmux or a non-Linux terminal** (Windows has no `termios`: it falls back to phase 1).
 - **Phase 3:** `/` command completion; expanding a folded result or the reasoning on demand.
+- **A review that runs to its `num_predict` cap still takes minutes** (seen in 1 of 59 live
+  reviews; the longest inputs). It is visible and skippable now, but not shorter. Option: a
+  smaller cap for the review call only, measured with the replay (a cut-off gives no verdict).
 - **Diffs, not done:** line numbers in a gutter instead of the `@@` header; a light-theme setting
   (`NANO_THEME=light`), since the dark tints look wrong on a white background.
 - **The startup panel spans the full width and is printed once**, so narrowing the window after

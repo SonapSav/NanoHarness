@@ -25,6 +25,7 @@ SPIN = "·✢✳✶✻✽✻✶✳✢"
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 RESULT_LINES = 4        # output lines shown under a tool call
+REVIEW = "\0review"     # in `running` while the reviewer checks a turn's changes
 DIFF_LINES = 20         # diff lines shown under an edit
 QUIET = 1.0             # seconds without output before the spinner appears
 
@@ -297,12 +298,27 @@ class RichUI(ui.PlainUI):
                 self.running = paused
                 self.quiet_since = time.monotonic()
 
+    def review_start(self):
+        with self.lock:
+            self.running.append((REVIEW, time.monotonic()))
+
+    def _review_done(self):
+        with self.lock:
+            self.running = [r for r in self.running if r[0] != REVIEW]
+            self._draw("")
+
+    def review_skipped(self):
+        self._review_done()
+        self._commit(f"{GREY}  (review skipped){RESET}")
+
     def review(self, faked, reason):
+        self._review_done()
         if faked:
             self._commit(f"{YELLOW}⚠ Review: this may make a check pass without fixing it: "
                          f"{reason}{RESET}")
 
     def review_failed(self, error):
+        self._review_done()
         self._commit(f"{GREY}  (review failed: {error}){RESET}")
 
     def warning(self, text):
@@ -369,6 +385,8 @@ class RichUI(ui.PlainUI):
             return f"{ORANGE}{frame} Thinking… {int(now - self.thinking_since)}s{RESET}"
         if self.running:
             name, since = self.running[-1]
+            if name == REVIEW:   # after the answer: without this the screen sat still, seen 17 s
+                return f"{ORANGE}{frame} Checking the changes… {int(now - since)}s · esc to skip{RESET}"
             return f"{ORANGE}{frame} Running {TITLES.get(name, name)}… {int(now - since)}s{RESET}"
         if self.open and self.quiet_since is not None and not self.partial:
             quiet = now - self.quiet_since

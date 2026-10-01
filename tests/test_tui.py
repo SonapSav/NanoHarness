@@ -324,3 +324,12 @@ def test_diff_colours_fall_back_to_256_without_truecolor(monkeypatch):
     assert "48;5;" in importlib.reload(tui).DEL_BG
     monkeypatch.setenv("COLORTERM", "truecolor")
     assert "48;2;" in importlib.reload(tui).DEL_BG
+
+
+def test_spinner_shows_while_the_reviewer_checks():
+    """Seen live: 17 s with nothing on screen after the answer, while the review ran."""
+    u, _ = make()
+    u.review_start()
+    assert "Checking the changes… 3s · esc to skip" in u.status_text(u.running[-1][1] + 3.2)
+    u.review(False, "OK")
+    assert u.status_text() is None and not u.running

@@ -31,6 +31,12 @@ class PlainUI:
         print(f"\n  \033[33m{who}{preview}\033[0m")
         return input("  allow? [y]es / [n]o / [a]lways for this tool: ")
 
+    def review_start(self):
+        """The reviewer is about to run (a model call after the answer: it can take a while)."""
+
+    def review_skipped(self):
+        print("\033[90m  (review skipped)\033[0m")
+
     def review(self, faked, reason):
         if faked:
             print(f"\033[33m  ⚠ review: this may make a check pass without fixing it: "

@@ -109,9 +109,13 @@ class Agent:
         by_commands = sorted(changed - self.before.keys() - {"?"})
         if by_commands:   # through bash: the old contents weren't kept, so no diff
             changes += "\n\nAlso changed by commands (contents not shown): " + ", ".join(by_commands)
+        ui.current.review_start()
         try:
             self.verdict = review.review(request, changes.strip(), self.last_command, answer,
                                          self.steps)
+        except KeyboardInterrupt:   # Esc/Ctrl-C while it checks: skip the check, keep the turn
+            ui.current.review_skipped()
+            return
         except Exception as e:  # a failed review must not cost the user the turn
             ui.current.review_failed(e)
             return
