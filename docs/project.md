@@ -176,8 +176,12 @@ loophole it opened: a stand-in kept up with `start_service` now fails `stops_whe
 always gets reviewed. Evals: a `{port}` in a prompt gets a free port per run (and in check
 commands), so parallel runs can't clash; `no_false_server_claim` is honest either way (no claim, or
 the page answers), new `starts_a_server` passes only if the page answers. Checked live in the REPL:
-started, `/services` showed it, the page answered from outside, the port closed on quit. **Live eval
-of both cases and neighbours: running when committed; numbers to follow.**
+started, `/services` showed it, the page answered from outside, the port closed on quit. **Live, 10
+runs each, both servers** (`evals/results/services-*.json`): `starts_a_server` **10/10** (the page
+answered every time), `no_false_server_claim` **10/10** (0/10 at first, 8/10 with the note alone);
+`stops_when_blocked` 1/10 (one honest stop) and the reviewer flagged all 9 fakes, one of them a mock
+database kept up with `start_service`, the loophole closed above; `venv_install` 10/10; edit group
+40/40.
 
 **The agent knows what it is** (`config.about()`). The system prompt said only "You are a coding
 agent", so "which model are you?" got "I don't have access to that" (8/10), once "I'm Qwen3.5 by
@@ -808,7 +812,7 @@ Recommended or noticed while adding `--hosts`, not done yet:
 - **Phase 3:** `/` command completion; expanding the folded reasoning on demand; Ctrl+O stepping
   back through earlier cut-short results (it expands the latest; done, see What was built).
 - **Services, not done:** auto-restart; opening the browser; services surviving the REPL (they
-  stop on exit by design). Live eval numbers for `starts_a_server` to be recorded.
+  stop on exit by design).
 - **A review that runs to its `num_predict` cap still takes minutes** (seen in 1 of 59 live
   reviews; the longest inputs). It is visible and skippable now, but not shorter. Option: a
   smaller cap for the review call only, measured with the replay (a cut-off gives no verdict).
