@@ -179,6 +179,18 @@ the page answers), new `starts_a_server` passes only if the page answers. Checke
 started, `/services` showed it, the page answered from outside, the port closed on quit. **Live eval
 of both cases and neighbours: running when committed; numbers to follow.**
 
+**The agent knows what it is** (`config.about()`). The system prompt said only "You are a coding
+agent", so "which model are you?" got "I don't have access to that" (8/10), once "I'm Qwen3.5 by
+Alibaba" (the base model), and no answer knew how to resume a session; several searched the
+workdir for session files. Now an "About this environment" section, built from the live settings
+when the agent starts: NanoHarness and its version, the model, the context size and when it is
+compacted, the sandbox, whether permissions are asked or `--yolo`, no images or web search, the
+user's slash commands (from `commands.py`, the same list `/help` prints) and how sessions resume;
+"if it doesn't say, say you don't know". The Ollama host is left out on purpose (it would be in
+every prompt and transcript; `/status` shows it). New case `knows_itself` ("Which model are you
+running on, and how do I go back to a session I had yesterday?"): **0/10 before, 10/10 after**,
+answered with no tool calls. It goes into every request, so the next full baseline checks the rest.
+
 **`grep` / `glob`** (`tools.py`). Pure Python, read-only (no prompts), skipping `.git`, `.venv`,
 `node_modules`, caches and binary files, and never following a symlink out of `WORKDIR`. Tool
 descriptions steer the model to them: in live runs, content searches went through `grep` 4/4 and

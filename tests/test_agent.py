@@ -216,3 +216,15 @@ def test_a_turn_that_started_a_service_is_reviewed(agent, monkeypatch):
            reply("Tests pass."), {"role": "assistant", "content": "FAKED: a stand-in database."})
     agent.turn("get the tests passing")
     assert agent.verdict == (True, "a stand-in database.")
+
+
+def test_the_system_prompt_says_what_the_agent_is_but_not_the_host():
+    """'Which model are you?' got guesses: knows_itself was 0/10 without this."""
+    from nanoharness.commands import COMMANDS
+    text = config.about()
+    assert config.MODEL in text and "NanoHarness" in text and f"{config.NUM_CTX:,}" in text
+    assert config.OLLAMA_HOST not in text and "100." not in text
+    assert all(usage.split()[0] in text for usage, _ in COMMANDS)
+    assert "none asked (--yolo)" in config.about(yolo=True)
+    assert config.about() in Agent(Permissions(yolo=False)).messages[0]["content"]
+    assert "none asked (--yolo)" in Agent(Permissions(yolo=True)).messages[0]["content"]

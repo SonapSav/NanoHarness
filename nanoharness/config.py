@@ -63,7 +63,34 @@ SESSION_DIR = Path(os.environ.get(
 )).expanduser()
 
 
-def system_prompt() -> str:
+def about(yolo=False) -> str:
+    """What the agent is and where it runs, from the live settings so it can't go stale.
+    Without it, "which model are you?" got a guess and harness questions made-up answers
+    (knows_itself: 0/10). The Ollama host is left out on purpose: /status shows it."""
+    from importlib.metadata import PackageNotFoundError, version
+    from . import sandbox
+    from .commands import COMMANDS
+    try:
+        name = f"NanoHarness v{version('nanoharness')}"
+    except PackageNotFoundError:
+        name = "NanoHarness"
+    box = sandbox.status()
+    commands = ", ".join(usage.split()[0] for usage, _ in COMMANDS)
+    return f"""About this environment (answer questions about yourself or the harness from this; if it
+doesn't say, say you don't know):
+- You are the agent in {name}, a small coding agent harness (Python, stdlib only)
+  running locally. The model answering is {MODEL}, served by Ollama.
+- Context window: {NUM_CTX:,} tokens. Past {COMPACT_AT:.0%} of it, older turns are replaced by
+  a summary; search_history finds the originals.
+- bash sandbox: {box}. Permissions: {"none asked (--yolo)" if yolo else "the user is asked before anything that writes"}.
+- You cannot see images, and you have no web search tool.
+- The user's own commands (typed by them, not your tools): {commands}. Sessions are saved
+  after every message; the user goes back to one with /resume (or starts with
+  `nanoharness -c` for the latest, `nanoharness --resume` to pick).
+"""
+
+
+def system_prompt(yolo=False) -> str:
     """Built on demand so it always names the current WORKDIR."""
     return f"""You are a coding agent working in the directory {WORKDIR}.
 
@@ -91,4 +118,5 @@ Rules:
   two files, call task instead of reading them yourself. Your context is small; the
   subagent's report is short.
 - When the task is done, reply with a short plain-text summary and no tool call.
-"""
+
+{about(yolo)}"""

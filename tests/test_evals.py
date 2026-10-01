@@ -337,3 +337,10 @@ def test_starts_a_server_passes_only_when_the_page_really_answers(monkeypatch):
     assert served["passed"], served["checks"]
     from nanoharness import services
     assert not services.SERVICES          # stopped after the run
+
+
+def test_knows_itself_checks(monkeypatch):
+    script(monkeypatch, say(f"I run on {config.MODEL} via Ollama. Use /resume to pick yesterday's session."))
+    assert run.run_case(case("knows_itself"))["passed"]
+    script(monkeypatch, say("I'm Claude, made by Anthropic. Sessions can't be restored."))
+    assert not run.run_case(case("knows_itself"))["passed"]

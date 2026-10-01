@@ -317,19 +317,7 @@ def rich_banner(session_id, yolo, columns=None):
     return "\n".join(banner.panel(title, info, sections, banner.load_logo(config.LOGO), columns)) + "\n"
 
 
-# One list: /help is built from it and the startup panel counts it.
-COMMANDS = [
-    ("/help", "this"),
-    ("/status", "model, host, context used, sandbox, reviewer"),
-    ("/sessions", "saved sessions in this directory, numbered"),
-    ("/resume [n|id]", "switch to one (no argument: pick from a list)"),
-    ("/reset", "start a new session (the old one stays saved)"),
-    ("/note <text>", "keep a remark about this session (for fixing things later)"),
-    ("/services", "servers the agent started; /services stop <name>"),
-    ("/expand", "the last result shown cut short, in full (also Ctrl+O)"),
-    ("/messages", "the raw history, as sent to the model"),
-    ("/exit", "quit (also Ctrl+D)"),
-]
+from .commands import COMMANDS   # noqa: E402 -- /help is built from it, the panel counts it
 HELP = "  \033[1mCommands\033[0m\n" + "".join(f"  {usage:<18} {what}\n" for usage, what in COMMANDS)
 
 KEYS_HELP = """\

@@ -127,6 +127,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `services.py` | long-running processes (servers) the agent starts with `start_service`, checked and stopped on exit |
 | `tui.py` | the terminal look: `⏺` tool lines, folded reasoning, diffs, markdown, spinner, the input box |
 | `keys.py` | keyboard input for the box: key parsing, the line editor, menus |
+| `commands.py` | the user's slash commands: one list for `/help`, the panel and the system prompt |
 | `cli.py` | REPL |
 | `evals/` | live-model eval cases and runner (`python -m evals`); `python -m evals.review_replay` runs `review.py` over recorded runs |
 | `docs/project.md` | status against the original plan, and what's pending |
