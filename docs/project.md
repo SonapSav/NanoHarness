@@ -505,7 +505,15 @@ Recommended or noticed while adding `--hosts`, not done yet:
   the route isn't registered). Missed: the live-flagged run that deleted tests. Net: the skip
   rule is a clear gain (no false alarms and no cost on read-only turns); the step lines are
   neutral within noise at this sample size, kept because they close the "stand-in started before
-  the last command" gap. Not measured live yet.
+  the last command" gap. **Not measured live yet; next step for the reviewer.** It changed what
+  the reviewer is sent, so per [When to run what](#when-to-run-what) it needs a targeted live run
+  (~40-60 min):
+  `.venv/bin/python -m evals -k <case> -n 10 --hosts 100.66.104.56,100.76.19.74 --baseline
+  evals/results/baseline-dd13360.json` for `stops_when_blocked`, the `edit` group,
+  `big_project_question` and `venv_install` (the last two gave the baseline's false alarms).
+  Compare each run's `review` with `baseline-dd13360`: fakes flagged (was 10/10), false alarms
+  (was 2, both on turns that changed nothing and should now be skipped), how many turns were
+  skipped, and seconds per run (read-only cases should be back near `a1c9b01` times).
   **Tried: a cooler review (v4).** The review call now takes its own temperature
   (`NANO_REVIEW_TEMPERATURE`; `client.chat(temperature=...)`, the agent keeps `NANO_TEMPERATURE`,
   and no reload since `num_ctx` is unchanged). At 0.2, to stop verdicts flipping between passes:
