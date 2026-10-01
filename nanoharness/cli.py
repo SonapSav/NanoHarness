@@ -3,8 +3,9 @@ import argparse
 import sys
 import threading
 import time
+from pathlib import Path
 
-from . import config, context, sandbox, session, tui, ui
+from . import banner, config, context, sandbox, session, tools, tui, ui
 from .agent import Agent
 from .client import ModelError
 from .permissions import Permissions
@@ -19,7 +20,7 @@ BANNER = """\033[1mNanoHarness\033[0m
   sandbox  {sandbox}{yolo}
 
   /exit  quit      /reset  new session      /sessions  list saved      /resume [n|id]  switch to one
-  /status  model, host, context, sandbox      /messages  dump raw history
+  /status  model, host, context, sandbox      /messages  dump raw history      /help
 """
 
 
@@ -125,6 +126,9 @@ def step(agent, printer, live, args, user_input):
         return switch_session(agent, user_input[len("/resume"):].strip(), live)
     if user_input == "/status":
         print(status(agent, args.yolo))
+        return agent
+    if user_input == "/help":
+        print(HELP + ("\n" + KEYS_HELP if live else ""))
         return agent
     if user_input == "/messages":
         import json
@@ -252,22 +256,62 @@ class StreamPrinter:
             self.status = False
 
 
+TOOL_GROUPS = {"read_file": "files", "write_file": "files", "edit_file": "files",
+               "glob": "search", "grep": "search", "search_history": "search",
+               "bash": "shell", "task": "delegation"}
+
+
 def rich_banner(session_id, yolo, columns=None):
-    rows = [("model", config.MODEL), ("workdir", str(config.WORKDIR)), ("session", session_id)]
-    if yolo:
-        rows.append(("yolo", "permissions disabled"))
+    """The startup panel (banner.py): logo, model, workdir and session; tools and safety."""
     import shutil
-    room = (columns or shutil.get_terminal_size((100, 24)).columns) - 15   # borders and the key
-    rows = [(k, v if len(v) <= room else "…" + v[-(room - 1):]) for k, v in rows]  # keep the end
-    inner = max(len(f"{k:<8} {v}") for k, v in rows) + 2
-    top = f"\033[38;5;208m╭─ ✻ \033[1mNanoHarness\033[0m\033[38;5;208m {'─' * (inner - 15)}╮\033[0m"
-    body = [f"\033[38;5;208m│\033[0m {k:<8} {v:<{inner - 11}} \033[38;5;208m│\033[0m"
-            if k != "yolo" else
-            f"\033[38;5;208m│\033[0m \033[31m{k:<8} {v:<{inner - 11}}\033[0m \033[38;5;208m│\033[0m"
-            for k, v in rows]
-    bottom = f"\033[38;5;208m╰{'─' * inner}╯\033[0m"
-    help_line = "\033[90m  /exit · /reset · /sessions · /resume [n|id] · /status · /messages\033[0m\n"
-    return "\n".join([top, *body, bottom, help_line])
+    from importlib.metadata import PackageNotFoundError, version
+    try:
+        title = f"NanoHarness v{version('nanoharness')}"
+    except PackageNotFoundError:
+        title = "NanoHarness"
+    home = str(Path.home())
+    workdir = str(config.WORKDIR)
+    workdir = "~" + workdir[len(home):] if workdir.startswith(home) else workdir
+    if len(workdir) > 40:                       # keep the end: the project is what matters
+        workdir = "…" + workdir[-39:]
+    info = [f"{banner.ORANGE}{banner.BOLD}{config.MODEL}{banner.RESET}",
+            f"{banner.GREY}{workdir}{banner.RESET}",
+            f"{banner.GREY}session {session_id}{banner.RESET}"]
+    groups = {}
+    for name in tools.REGISTRY:
+        groups.setdefault(TOOL_GROUPS.get(name, "other"), []).append(name)
+    order = ["files", "search", "shell", "delegation", "other"]
+    tool_rows = [(g, ", ".join(groups[g])) for g in order if g in groups]
+    box = sandbox.status()
+    safety = [("sandbox", box.removeprefix("bwrap: ") if box.startswith("bwrap:") else "!" + box),
+              ("permissions", "!none asked (--yolo)" if yolo else "asked before anything writes"),
+              ("review", "on" if config.REVIEW else "off")]
+    sections = [("Tools", tool_rows), ("Safety", safety),
+                (None, f"{len(tools.REGISTRY)} tools · /help for commands")]
+    columns = columns or shutil.get_terminal_size((100, 24)).columns
+    return "\n".join(banner.panel(title, info, sections, banner.load_logo(config.LOGO), columns)) + "\n"
+
+
+HELP = """\
+  \033[1mCommands\033[0m
+  /help              this
+  /status            model, host, context used, sandbox, reviewer
+  /sessions          saved sessions in this directory, numbered
+  /resume [n|id]     switch to one (no argument: pick from a list)
+  /reset             start a new session (the old one stays saved)
+  /messages          the raw history, as sent to the model
+  /exit              quit (also Ctrl+D)
+"""
+
+KEYS_HELP = """\
+  \033[1mKeys\033[0m
+  Enter              send; during a turn, queue it for after
+  Alt+Enter, Ctrl+J  new line (pasted text keeps its lines)
+  ↑ / ↓              move between lines, or through earlier input
+  Esc, Ctrl+C        interrupt a turn
+  Ctrl+C             otherwise: clear the box; twice on an empty box: exit
+  In menus           ↑/↓ and Enter, or the letter; Esc for no
+"""
 
 
 def status(agent, yolo):

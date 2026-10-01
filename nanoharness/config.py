@@ -49,6 +49,13 @@ HTTP_TIMEOUT = int(os.environ.get("NANO_HTTP_TIMEOUT", "300"))
 # The sandbox root. Every path a tool touches must resolve inside this.
 WORKDIR = Path(os.environ.get("NANO_WORKDIR", os.getcwd())).resolve()
 
+# The startup panel's logo: one-colour text art, best about 30 columns by 10-12 rows (up to
+# 36 by 16 is shown; bigger is trimmed). No file: the space is kept with a small mark.
+LOGO = Path(os.environ.get(
+    "NANO_LOGO",
+    Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "nanoharness/logo.txt",
+)).expanduser()
+
 # Saved conversations. Outside WORKDIR on purpose: the agent's tools cannot touch them.
 SESSION_DIR = Path(os.environ.get(
     "NANO_SESSION_DIR",

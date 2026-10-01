@@ -87,9 +87,15 @@ errors red); edits show a coloured diff once, at the permission prompt or under 
 `--yolo`; subagent calls nest as `⎿ ↳ Grep(...)`; answers stream line by line with light markdown
 (headings, bullets, `code`, **bold**, fenced code) and wrap at the terminal width so the live line
 never wraps; the spinner also covers running tools (`Running Bash… 4s`), closing the gap above.
-↑/↓ recall input across runs (`readline`, history next to the sessions). The banner shows only
-model, workdir and session; `/status` (both modes) adds host, context used (estimated, against
-`num_ctx` and the compaction threshold), sandbox, reviewer and yolo. Checked live in a
+↑/↓ recall input across runs (`readline`, history next to the sessions). The startup panel
+(`banner.py`, after Hermes Agent's): the name and version in the top border; on the left a logo slot
+(one-colour art from `~/.config/nanoharness/logo.txt` or `NANO_LOGO`, centred as a block, trimmed
+to 36×16; with no file the space is kept, 30×10 with a small mark) over model, workdir and
+session; on the right a list of sections (Tools, grouped from the registry; Safety: sandbox,
+permissions, reviewer) and `N tools · /help for commands`. Below 90 columns it stacks, without an
+empty logo slot. `/status` (both modes) adds host, context used (estimated, against `num_ctx` and
+the compaction threshold), sandbox, reviewer and yolo; `/help` lists commands, and keys with the
+input box. Checked live in a
 pseudo-terminal, with and without `--yolo`.
 
 **Terminal UI, phase 2** (`LiveUI` in `tui.py`, `keys.py`). A bottom area that stays put while the
@@ -721,6 +727,11 @@ Recommended or noticed while adding `--hosts`, not done yet:
   edge can shift on lines that contain them.
 - **Not tried in tmux or a non-Linux terminal** (Windows has no `termios`: it falls back to phase 1).
 - **Phase 3:** `/` command completion; expanding a folded result or the reasoning on demand.
+- **The startup panel spans the full width and is printed once**, so narrowing the window after
+  startup rewraps its rows and breaks its right border (the input box redraws and is fine). A fix,
+  if it bothers: redraw it on a `/clear`-style command.
+- **The logo:** to come from the user (one colour, ~30×10-12). The panel's right column is a list of
+  sections so skills and flows can be added there once they exist.
 
 ### Known limitations
 

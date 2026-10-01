@@ -117,10 +117,12 @@ def test_status_shows_what_the_banner_leaves_out(run):
     assert config.OLLAMA_HOST in out and "tokens" in out
 
 
-def test_rich_banner_is_short():
-    banner = cli.rich_banner("20261001-000000", yolo=False)
-    assert config.MODEL in banner and "20261001-000000" in banner and "/status" in banner
-    assert config.OLLAMA_HOST not in banner and "sandbox" not in banner and "startup" not in banner
+def test_rich_banner_panel_has_the_essentials_and_not_the_host():
+    text = re.sub(r"\x1b\[[0-9;]*m", "", cli.rich_banner("20261001-000000", yolo=False, columns=120))
+    assert config.MODEL in text and "20261001-000000" in text and "/help for commands" in text
+    assert "NanoHarness v" in text.split("\n")[0]                   # title in the top border
+    assert "files: read_file, write_file, edit_file" in text and "sandbox:" in text
+    assert config.OLLAMA_HOST not in text
 
 
 def test_rich_banner_fits_a_narrow_terminal(monkeypatch, tmp_path):
@@ -130,3 +132,8 @@ def test_rich_banner_fits_a_narrow_terminal(monkeypatch, tmp_path):
     box = lines[:lines.index(next(l for l in lines if l.startswith("╰"))) + 1]
     assert all(len(l) <= 60 for l in box)
     assert any("…" in l and l.rstrip(" │").endswith("/project") for l in lines)
+
+
+def test_help_lists_commands_and_keys_only_with_the_box(run):
+    out = run(["/help"])
+    assert "/resume [n|id]" in out and "/status" in out and "Keys" not in out   # plain: no box

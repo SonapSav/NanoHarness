@@ -46,8 +46,15 @@ used, key hints):
 | Ctrl+C | otherwise: clear the box; twice on an empty box: exit |
 | Ctrl+D | exit (empty box) |
 
-Permission prompts and the `/resume` picker are menus: ↑/↓ and Enter, or `y`/`a`/`n`, Esc for no. The banner is kept short (model, directory, session); `/status` shows
-the rest: host, how full the context is, sandbox, reviewer and permission settings. Stdlib only.
+Permission prompts and the `/resume` picker are menus: ↑/↓ and Enter, or `y`/`a`/`n`, Esc for no.
+
+The startup panel shows a logo slot with the model, directory and session on the left, and the
+tools and safety settings on the right; `/status` adds the host and how full the context is,
+`/help` lists commands and keys. Stdlib only.
+
+**Your own logo:** put one-colour text art in `~/.config/nanoharness/logo.txt` (or point `NANO_LOGO`
+at a file). About 30 columns by 10-12 rows fits best; up to 36 by 16 is shown, larger is trimmed.
+Braille (`⣿⡇⠛`) or half blocks (`▀▄█`) give the most detail at that size.
 
 Every conversation is saved after each message to `~/.local/share/nanoharness/sessions/`
 (one `0600` JSON file each; outside the project so the agent's tools can't touch it). A
@@ -106,6 +113,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `review.py` | optional second look after a turn that wrote: does the change fake a pass? (on by default, `NANO_REVIEW=0` to skip) |
 | `agent.py` | the loop |
 | `ui.py` | what the agent shows or asks goes through here; `PlainUI` is the original output, which the evals read |
+| `banner.py` | the startup panel: logo slot, model, tools, safety |
 | `tui.py` | the terminal look: `⏺` tool lines, folded reasoning, diffs, markdown, spinner, the input box |
 | `keys.py` | keyboard input for the box: key parsing, the line editor, menus |
 | `cli.py` | REPL |
@@ -184,7 +192,7 @@ bubblewrap`). It is an allow-list: the sandbox starts empty and gets only
 Everything else (`/home` with your keys and tokens, `/run` with `docker.sock` and keyrings,
 `/media`, `/mnt`, `/var`, other mounts) does not exist inside. The environment is cleared to
 `PATH`, locale and `TERM`, so tokens don't leak in. Each command gets its own PID namespace
-and dies with the harness. The banner's `sandbox` line says what is in force.
+and dies with the harness. The startup panel's `sandbox` line says what is in force.
 
 It does **not** stop writes inside `WORKDIR` (`rm -rf .` still works; the permission prompt
 is the gate for that), or network access unless `NANO_SANDBOX_NET=0`. Tools that live in
