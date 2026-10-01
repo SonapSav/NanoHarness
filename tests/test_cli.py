@@ -157,3 +157,14 @@ def test_note_appends_a_findable_record(run):
     assert first["note"] == "the spinner froze after Esc" and first["session"] and first["messages"] >= 1
     assert first["workdir"] == str(config.WORKDIR) and len(lines) == 2
     assert "noted" in out and "2 notes in" in out
+
+
+def test_footer_shows_the_last_turn_in_ms(run, monkeypatch):
+    agent = cli.Agent()
+    assert " ms" not in cli.footer(agent)                     # nothing before the first turn
+    agent.last_turn_ms = 12345
+    assert cli.footer(agent).endswith(" · 12,345 ms")
+    monkeypatch.setattr(client, "chat", lambda *a, **k: {"role": "assistant", "content": "hi"})
+    args = cli.parse_args([])
+    agent = cli.step(cli.Agent(), None, None, args, "hello")
+    assert isinstance(agent.last_turn_ms, int) and agent.last_turn_ms >= 0

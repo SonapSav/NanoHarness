@@ -142,10 +142,13 @@ def step(agent, printer, live, args, user_input):
         printer.reset()
     if live:
         live.set_busy(True)
+    started = time.monotonic()
     try:
         try:
             answer = agent.turn(user_input)
         finally:
+            # The whole turn, failed or interrupted ones too: model, tools, prompts, review.
+            agent.last_turn_ms = round((time.monotonic() - started) * 1000)
             if printer:
                 printer.stop()
             if live:
@@ -405,7 +408,9 @@ def short_path(path, limit):
 def footer(agent):
     """The footer's left side: where, which model, how full the context is."""
     used = context.estimate_tokens(agent.messages)
-    return f"{short_path(config.WORKDIR, 32)} · {config.MODEL} · ctx {100 * used // config.NUM_CTX}%"
+    text = f"{short_path(config.WORKDIR, 32)} · {config.MODEL} · ctx {100 * used // config.NUM_CTX}%"
+    last = getattr(agent, "last_turn_ms", None)
+    return text + (f" · {last:,} ms" if last is not None else "")
 
 
 def input_history():
