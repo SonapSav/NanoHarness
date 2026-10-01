@@ -147,3 +147,13 @@ def test_footer_starts_with_the_directory(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "WORKDIR", tmp_path / ("x" * 60) / "proj")
     left = cli.footer(cli.Agent())
     assert left.startswith("…") and left.split(" · ")[0].endswith("/proj") and len(left.split(" · ")[0]) == 32
+
+
+def test_note_appends_a_findable_record(run):
+    import json
+    out = run(["/note the spinner froze after Esc", "/note second one", "/note"])
+    lines = cli.notes_path().read_text().splitlines()
+    first = json.loads(lines[0])
+    assert first["note"] == "the spinner froze after Esc" and first["session"] and first["messages"] >= 1
+    assert first["workdir"] == str(config.WORKDIR) and len(lines) == 2
+    assert "noted" in out and "2 notes in" in out

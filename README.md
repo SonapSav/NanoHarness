@@ -50,7 +50,9 @@ Permission prompts and the `/resume` picker are menus: ↑/↓ and Enter, or `y`
 
 The startup panel shows a logo slot with the model, directory and session on the left, and the
 tools and safety settings on the right; `/status` adds the host and how full the context is,
-`/help` lists commands and keys. Stdlib only.
+`/help` lists commands and keys. `/note <text>` keeps a remark about the session (what went wrong,
+what felt clumsy) in `~/.local/share/nanoharness/notes.jsonl`, with the session id and how far
+in it was, so the moment can be found again. Stdlib only.
 
 **Your own logo:** put one-colour text art in `~/.config/nanoharness/logo.txt` (or point `NANO_LOGO`
 at a file). About 30 columns by 10-12 rows fits best; up to 36 by 16 is shown, larger is trimmed.

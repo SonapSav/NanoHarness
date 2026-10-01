@@ -127,6 +127,9 @@ def step(agent, printer, live, args, user_input):
     if user_input == "/status":
         print(status(agent, args.yolo))
         return agent
+    if user_input == "/note" or user_input.startswith("/note "):
+        print(note(agent, user_input[len("/note"):].strip()))
+        return agent
     if user_input == "/help":
         print(HELP + ("\n" + KEYS_HELP if live else ""))
         return agent
@@ -295,6 +298,7 @@ HELP = """\
   /sessions          saved sessions in this directory, numbered
   /resume [n|id]     switch to one (no argument: pick from a list)
   /reset             start a new session (the old one stays saved)
+  /note <text>       keep a remark about this session (for fixing things later)
   /messages          the raw history, as sent to the model
   /exit              quit (also Ctrl+D)
 """
@@ -363,6 +367,32 @@ def save_live_history(live):
         path.write_text(json.dumps(live.editor.history[-LIVE_HISTORY_MAX:]))
     except OSError:
         pass
+
+
+def notes_path():
+    return config.SESSION_DIR.parent / "notes.jsonl"
+
+
+def note(agent, text):
+    """/note: keep a remark about this session (what went wrong, what felt clumsy) with
+    enough to find the moment again: the session and how many messages it had then."""
+    import json
+    path = notes_path()
+    if not text:
+        try:
+            count = sum(1 for line in path.read_text().splitlines() if line.strip())
+        except OSError:
+            count = 0
+        return f"\033[90musage: /note <text> · {count} notes in {path}\033[0m"
+    record = {"when": session.now(), "session": agent.session.id if agent.session else None,
+              "messages": len(agent.messages), "workdir": str(config.WORKDIR), "note": text}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError as e:
+        return f"\033[31mcould not save the note: {e}\033[0m"
+    return f"\033[90mnoted ({path})\033[0m"
 
 
 def short_path(path, limit):

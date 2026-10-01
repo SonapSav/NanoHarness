@@ -95,7 +95,8 @@ session; on the right a list of sections (Tools, grouped from the registry; Safe
 permissions, reviewer) and `N tools · /help for commands`. Below 90 columns it stacks, without an
 empty logo slot. `/status` (both modes) adds host, context used (estimated, against `num_ctx` and
 the compaction threshold), sandbox, reviewer and yolo; `/help` lists commands, and keys with the
-input box. Checked live in a
+input box. `/note <text>` appends a remark to `notes.jsonl` next to the sessions folder, with the
+time, session id, message count and workdir, for collecting problems from real use. Checked live in a
 pseudo-terminal, with and without `--yolo`.
 
 **Terminal UI, phase 2** (`LiveUI` in `tui.py`, `keys.py`). A bottom area that stays put while the
