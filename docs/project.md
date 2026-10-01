@@ -140,6 +140,14 @@ scrollback, during a turn too. Covers `bash` output, other multi-line results an
 20 lines. Only the latest; stepping back through earlier ones if that turns out to be needed. In
 plain output, which shows no results, `/expand` prints the last tool result from the history.
 
+**The spinner was hidden by an unfinished line** (from a `/note`: "it hangs here while showing 'Now
+let me create the shared CSS and JavaScript files:' ... no indication it is working"). The text
+before a tool call often ends without a newline, and the spinner only took the live line when no
+unfinished line was on it; so while the model silently wrote a 7,583-char `styles.css`, the screen
+showed that sentence and nothing else. Now an unfinished line goes into scrollback after a second
+of silence and the spinner takes over (if the model carries on, the rest starts a new line). Live,
+same shape: `Working…` counted for the whole 44 s write; no pause over 1.1 s.
+
 **`grep` / `glob`** (`tools.py`). Pure Python, read-only (no prompts), skipping `.git`, `.venv`,
 `node_modules`, caches and binary files, and never following a symlink out of `WORKDIR`. Tool
 descriptions steer the model to them: in live runs, content searches went through `grep` 4/4 and

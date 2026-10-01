@@ -411,12 +411,22 @@ class RichUI(ui.PlainUI):
                 return f"{ORANGE}{frame} Working… {int(quiet)}s{RESET}"
         return None
 
+    def settle(self, now=None):
+        """A line left unfinished goes into scrollback after QUIET seconds of silence, so the
+        spinner can take the live line. From a /note: "Now let me create the shared CSS and
+        JavaScript files:" sat there, no newline, while the model silently wrote 7,583 chars."""
+        now = now or time.monotonic()
+        if self.open and self.partial and self.quiet_since is not None \
+                and now - self.quiet_since >= QUIET:
+            self._flush_partial()
+
     def _tick(self):
         while True:
             time.sleep(0.15)
             with self.lock:
                 if getattr(self, "resized", False):
                     self._render()
+                self.settle()
                 line = self.status_text()
                 if line is not None:
                     self._draw(line)

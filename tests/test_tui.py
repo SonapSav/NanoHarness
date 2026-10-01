@@ -359,3 +359,20 @@ def test_nothing_to_expand_after_a_short_result():
     assert "ctrl+o" not in screen(out.getvalue())
     u.expand()
     assert "nothing cut short to expand" in screen(out.getvalue())
+
+
+def test_an_unfinished_line_gives_way_to_the_spinner_after_a_quiet_second():
+    """From a /note: the text ended without a newline, then silence while a big write_file was
+    generated, and nothing said the model was still working."""
+    u, out = make()
+    u("start", "")
+    stream(u, "Now let me create the shared CSS and JavaScript files:")
+    t = u.quiet_since
+    u.settle(t + 0.5)
+    assert u.partial and u.status_text(t + 0.5) is None          # still writing: leave it
+    u.settle(t + 1.2)
+    assert not u.partial and "Working… 1s" in u.status_text(t + 1.2)
+    assert "⏺ Now let me create the shared CSS and JavaScript files:" in screen(out.getvalue())
+    stream(u, " more")                                           # it carries on: a new line
+    u("end", "")
+    assert screen(out.getvalue()).endswith("  more")
