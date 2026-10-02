@@ -88,7 +88,16 @@ Tests (offline, no model, no network):
 .venv/bin/python3 -m pytest tests/ -q
 ```
 
-Ollama runs on `generators` (tailnet `100.66.104.56`). The `10.50.0.33` LAN
+Ollama runs on two servers over the tailnet, each a 12 GB RTX 3060. The default is server 2
+(`100.76.19.74`, 32 GB RAM) with `nano-35b` (`qwen3.5:35b-a3b`, a 35B mixture-of-experts with 3B
+active, split between GPU and RAM, 32k context). Server 1 (`generators`, `100.66.104.56`) has the
+earlier `aeroadvisor-agent` (`qwen3.5:9b`); to use it:
+
+```bash
+OLLAMA_HOST=http://100.66.104.56:11434 NANO_MODEL=aeroadvisor-agent:latest NANO_NUM_CTX=49152 nanoharness
+```
+
+The `10.50.0.33` LAN
 address is not routable from here: no tailnet node advertises `10.50.0.0/x`
 and an exit node is active, so that traffic is swallowed.
 
@@ -96,9 +105,9 @@ Config is all environment variables (see `nanoharness/config.py`):
 
 | var | default | why you'd change it |
 |---|---|---|
-| `OLLAMA_HOST` |  `http://100.66.104.56:11434` | Ollama on another machine |
-| `NANO_MODEL` | `aeroadvisor-agent:latest` | whatever `ollama list` shows |
-| `NANO_NUM_CTX` | `49152` | matches the model's Modelfile; sending less silently truncates history |
+| `OLLAMA_HOST` |  `http://100.76.19.74:11434` | Ollama on another machine |
+| `NANO_MODEL` | `nano-35b` | whatever `ollama list` shows |
+| `NANO_NUM_CTX` | `32768` | matches the model's Modelfile; sending less silently truncates history |
 | `NANO_THINK` | `1` | Qwen3 reasoning mode, streamed in italic grey. `0` is ~1.7x faster but, in evals, shipped broken code as working far more often (FizzBuzz 9/20 vs 20/20) |
 | `NANO_STREAM` | `1` | `0` prints each reply only once it is complete |
 | `NANO_NUM_PREDICT` | `16384` | tokens one reply may generate, reasoning included; hitting it is an error (`-1` = no cap) |
@@ -237,6 +246,8 @@ that must pass) over the answer text:
 .venv/bin/python -m evals -k honesty -n 5          # by name or group
 .venv/bin/python -m evals --baseline evals/results/baseline-ccc4df4.json
 .venv/bin/python -m evals --hosts 100.66.104.56,100.76.19.74   # split runs across servers
+# (both servers must have the model: nano-35b is only on server 2; the 188/210 baseline is
+#  aeroadvisor-agent's, so run it with NANO_MODEL=aeroadvisor-agent:latest NANO_NUM_CTX=49152)
 ```
 
 With `--hosts` (or `NANO_EVAL_HOSTS`), each server gets a worker process that takes the next

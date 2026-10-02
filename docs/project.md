@@ -3,7 +3,8 @@
 *Last updated 2026-09-30.*
 
 NanoHarness is a coding agent harness built from scratch: stdlib-only Python, no SDKs, talking to a
-local model (`aeroadvisor-agent`, a Qwen3 fine-tune) on Ollama over the tailnet. The point is to keep
+local model on Ollama over the tailnet: `nano-35b` (`qwen3.5:35b-a3b`) since 2026-10-02, before that
+`aeroadvisor-agent` (`qwen3.5:9b`). The point is to keep
 every moving part visible: the wire format, the loop, the tools, the permission gate.
 
 This document records what the original plan asked for, what has been built, how it was verified,
@@ -282,6 +283,24 @@ prompt. The runner gives each server its own worker process (not a thread: a run
 and reports per-server pass rates. Live: 6 rename runs in 3m02s, 3/3 on each server, against ~6 min
 on one.
 
+## The model
+
+**Hardware.** Two Ollama servers on the tailnet, each a 12 GB RTX 3060; server 2 (`100.76.19.74`)
+has 32 GB RAM. The five models installed at first (`aeroadvisor-agent`, `-code`, `-think`, `-fast`,
+`qwen3.5:9b`) are **one set of weights**, `qwen3.5:9b` at Q4_K_M; they differ only in sampling
+parameters, so none of them codes better than another. The other one, `lfm2.5:8b`, is the same
+size class.
+
+**Switched to `nano-35b` (2026-10-02).** `qwen3.5:35b-a3b` at Q4_K_M: 35B parameters, a mixture of
+experts with 3B active per token, same family as before (tools, reasoning). 23.4 GB, so it doesn't
+fit 12 GB; without `num_gpu 99` Ollama puts 10.7 GB (45%) on the GPU and 12.9 GB in RAM. Modelfile
+on server 2 at `~/ollama-models/Modelfile.35b` (`num_ctx 32768`, sampling as `aeroadvisor-agent`;
+the server already had `OLLAMA_FLASH_ATTENTION=1` and `OLLAMA_KV_CACHE_TYPE=q8_0`). Measured:
+writing **~41 tok/s** (as fast as the 9B: only 3B active), reading a prompt cold ~700 tok/s (about
+half the 9B: a 29k-token prompt takes 43 s), a cached next turn 0.24 s, load ~27 s; 16k to 32k
+context barely changed the split; swap unused, 16 GB RAM still available. Chosen on the user's
+impression that it is more capable; **not yet measured** (see Pending).
+
 ## Eval baseline
 
 At commit `ccc4df4` (services and their three tools in every request, the "About this
@@ -406,8 +425,13 @@ Results are saved in `evals/results/` (gitignored, so they exist only on this ma
 file is `evals/results/baseline-ccc4df4.json`. Compare with:
 
 ```bash
-.venv/bin/python -m evals --hosts 100.66.104.56,100.76.19.74 --baseline evals/results/baseline-ccc4df4.json
+NANO_MODEL=aeroadvisor-agent:latest NANO_NUM_CTX=49152 \
+  .venv/bin/python -m evals --hosts 100.66.104.56,100.76.19.74 --baseline evals/results/baseline-ccc4df4.json
 ```
+
+That baseline is `aeroadvisor-agent`'s. The default model is now `nano-35b`, which only server 2 has:
+evals on it run with `--hosts 100.76.19.74` (one at a time, so about twice as long). Its own
+baseline is still to be taken (see Pending).
 
 ### When to run what
 
@@ -655,6 +679,14 @@ Recommended or noticed while adding `--hosts`, not done yet:
   a longer timeout for installs, or a pip cache or mirror on the machine running the harness.
   Worth doing only if it keeps happening. The next day it was 10/10 at ~20 s a run (124 s at the
   baseline) with nothing relevant changed: the network, as suspected.
+- **Measure `nano-35b`.** A coding eval group first (4-5 realistic tasks graded by hidden tests:
+  the current cases test behaviour, and their coding tasks are FizzBuzz-level), then that group
+  on both models (reference on server 1, `nano-35b` on server 2, in parallel, ~2 h) and a full
+  `nano-35b` baseline (server 2 only, ~3-4 h). Estimated ~1 h to build the group.
+- **Other options, if `nano-35b` isn't enough:** an OpenAI-compatible backend (OpenRouter, also
+  OpenAI or local llama.cpp/vLLM servers), stdlib only, with a cost line and a spending cap (code
+  leaves the machine, it costs money); research tools (web search/fetch, source discipline, a
+  research eval group), which suit a small local model better than coding.
 - **Reviewer false alarm, new kind** (`ccc4df4`, 2/10 `precise_edit`): it flags a precise edit as
   faked because an unchanged line elsewhere in the file still has the old value (`DEBUG = False`
   in the class the task says to leave alone). Watch it; if it recurs, a replay can test a prompt

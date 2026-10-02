@@ -2,11 +2,14 @@
 import os
 from pathlib import Path
 
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://100.66.104.56:11434")  # generators, over tailscale
-MODEL = os.environ.get("NANO_MODEL", "aeroadvisor-agent:latest")
+# Server 2 (12 GB RTX 3060, 32 GB RAM) runs nano-35b: qwen3.5:35b-a3b, a 35B mixture-of-experts
+# with 3B active, 45% on the GPU and the rest in system RAM; ~41 tok/s writing. Server 1
+# (100.66.104.56) still has the earlier aeroadvisor-agent (qwen3.5:9b, 49152 context).
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://100.76.19.74:11434")  # over tailscale
+MODEL = os.environ.get("NANO_MODEL", "nano-35b")
 
 # Ollama silently truncates history past num_ctx, so always set it explicitly.
-NUM_CTX = int(os.environ.get("NANO_NUM_CTX", "49152"))  # matches the Modelfile; do not send less
+NUM_CTX = int(os.environ.get("NANO_NUM_CTX", "32768"))  # matches the Modelfile; do not send less
 TEMPERATURE = float(os.environ.get("NANO_TEMPERATURE", "0.6"))
 # Qwen3 reasoning mode. On by default: in evals it took FizzBuzz from 9/20 to 20/20 (the
 # model stopped shipping swapped Fizz/Buzz as "success") for ~1.7x the time per task.
