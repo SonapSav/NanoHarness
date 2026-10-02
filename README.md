@@ -108,7 +108,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `OLLAMA_HOST` |  `http://100.76.19.74:11434` | Ollama on another machine |
 | `NANO_MODEL` | `nano-35b` | whatever `ollama list` shows |
 | `NANO_NUM_CTX` | `49152` | matches the model's Modelfile; sending less silently truncates history |
-| `NANO_THINK` | `1` | reasoning mode, folded to "Thought for Ns". On `nano-35b` it is ~20x slower on a small function (108 s vs 5.6 s); `0` for speed. On the 9B it mattered: FizzBuzz 9/20 off, 20/20 on |
+| `NANO_THINK` | `1` | reasoning mode, folded to "Thought for Ns": `1`, `0`, or a level `low` / `medium` / `high`. On `nano-35b`, `low` reasons 5-8x less on one question but is no faster on whole tasks (more rounds to fix mistakes), with the same pass rates. On the 9B, off shipped broken code (FizzBuzz 9/20 vs 20/20) |
 | `NANO_STREAM` | `1` | `0` prints each reply only once it is complete |
 | `NANO_NUM_PREDICT` | `16384` | tokens one reply may generate, reasoning included; hitting it is an error (`-1` = no cap) |
 | `NANO_REVIEW` | `0` | `1`: after a turn that wrote, a separate call checks whether the change makes a check pass without fixing it, and warns you (off while `nano-35b` is tried without it) |

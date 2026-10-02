@@ -98,3 +98,25 @@ def test_token_counts_from_the_last_line_add_up():
     read_stream([line(content="hi"), last])
     read_stream([line(content="again"), last])
     assert client.USAGE["in"] - before["in"] == 2400 and client.USAGE["out"] - before["out"] == 68
+
+
+def test_think_takes_on_off_or_a_level(monkeypatch):
+    from nanoharness import config
+    assert config.think_setting("1") is True and config.think_setting("on") is True
+    assert config.think_setting("0") is False and config.think_setting("") is False
+    assert config.think_setting("LOW") == "low" and config.think_setting("medium") == "medium"
+    with pytest.raises(SystemExit, match="NANO_THINK"):
+        config.think_setting("maybe")
+
+
+def test_a_think_level_is_sent_to_ollama(monkeypatch):
+    import io
+    import urllib.request
+    from nanoharness import client, config
+    sent = []
+    monkeypatch.setattr(config, "THINK", "low")
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda req, timeout=None: (sent.append(json.loads(req.data)),
+                                                   io.BytesIO(line(done=True, content="ok")))[1])
+    client.chat([{"role": "user", "content": "hi"}])
+    assert sent[0]["think"] == "low"

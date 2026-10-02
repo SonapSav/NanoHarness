@@ -14,11 +14,26 @@ NUM_CTX = int(os.environ.get("NANO_NUM_CTX", "49152"))  # matches the Modelfile;
 TEMPERATURE = float(os.environ.get("NANO_TEMPERATURE", "0.6"))
 # Qwen reasoning mode. On the 9B it took FizzBuzz from 9/20 to 20/20 (it stopped shipping swapped
 # Fizz/Buzz as "success") for ~1.7x the time. On nano-35b a small function took 108 s with it and
-# 5.6 s without (~20x). Turned off for a few minutes on 2026-10-02, then back on at the user's
-# choice: quality over speed until measured. Of Ollama's levels, "low" reasons 5-8x less on this
-# model (3/3 runs, 12-34 s), "medium" about as much as on, "high" once least (unclear).
-# NANO_THINK=0 turns it off.
-THINK = os.environ.get("NANO_THINK", "1") == "1"
+# 5.6 s without, but on whole tasks (write, run, fix) on was no slower than "low" and passed as
+# often (create_and_run, fix_failing_test, code_to_spec, code_two_file_bug, 5 runs each), so it
+# stays on. Of Ollama's levels, "low" reasons 5-8x less on one reply, "medium" about as much as on.
+# NANO_THINK=0 turns it off; low / medium / high are passed to Ollama as a level.
+THINK_LEVELS = ("low", "medium", "high")
+
+
+def think_setting(value):
+    """NANO_THINK -> what Ollama's `think` takes: True, False, or a level."""
+    value = value.strip().lower()
+    if value in THINK_LEVELS:
+        return value
+    if value in ("1", "true", "on", "yes"):
+        return True
+    if value in ("0", "false", "off", "no", ""):
+        return False
+    raise SystemExit(f"NANO_THINK must be 1, 0, low, medium or high, not {value!r}")
+
+
+THINK = think_setting(os.environ.get("NANO_THINK", "1"))
 # Cap on tokens generated per reply, reasoning included (Ollama's num_predict; -1 = no cap).
 # Recorded replies top out near 2k tokens; the two that spiralled ran ~50k tokens of
 # reasoning for ~17 min and ended empty. Hitting the cap is an error the user sees.

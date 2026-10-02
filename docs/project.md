@@ -317,10 +317,27 @@ prompt (an IPv4 validator): `think: true` reasoned 14,249 chars, 4,230 tokens ou
 `false` 128 tokens, **5.6 s**, about 20x. Ollama's levels, three runs each: `true` 14,249 / 13,816 /
 9,336 chars (108 / 108 / 74 s); "medium" 10,548 / 10,293 / 12,382 (83 / 84 / 94 s), the same as on;
 **"low" 1,359 / 2,707 / 1,670 (12 / 31 / 34 s)**, 5-8x less reasoning; "high" once 631 chars (8 s),
-unexplained from one run. So "low" is a real middle setting for this model (the harness only passes
-on/off today); whether it keeps the quality is unmeasured. On the 9B, thinking is what stopped it
-shipping broken code (FizzBuzz 9/20 off, 20/20 on); whether `nano-35b` needs it is unmeasured, so
-it stays on: quality over speed until the measurement says otherwise.
+unexplained from one run. So "low" is a real middle setting for this model; `NANO_THINK` now takes
+`low` / `medium` / `high` besides 1 / 0.
+
+**Measured: `low` vs `on` on real tasks** (`nano-35b`, server 2, 5 runs each,
+`evals/results/think-{low,1}-*.json`):
+
+| Case | `low` | `on` | `low` s/run | `on` s/run |
+|---|---|---|---|---|
+| `create_and_run` (FizzBuzz) | 5/5 | 5/5 | 24.8 | 18.2 |
+| `fix_failing_test` | 5/5 | 5/5 | 26.1 | 19.9 |
+| `code_to_spec` | 2/5 | 3/5 | 233 | 153 |
+| `code_two_file_bug` | 5/5 | 5/5 | 39.4 | 42.2 |
+
+Quality is the same within noise (one run apart on the spec task, the same kinds of failure: wrong
+values for some valid durations, no error for some invalid ones). **And `low` is not faster on real
+tasks, often slower**: the single-reply test above (108 s vs 5.6 s) measured one answer, while a task
+is several rounds of write, run, fix; with less reasoning `low` made more mistakes on the way and
+needed more rounds (`code_to_spec`: 10,132 tokens vs 6,704, ~80 s more per run). So **thinking stays
+on**; the levels stay available (`low` may suit quick questions where one long reasoning reply
+dominates). Neither setting gets `code_to_spec` right reliably (~3 in 5): the model's ceiling for
+careful spec-following, not a thinking setting.
 
 **Coding: verified by the user directly, not by evals.** A coding eval group was built for the
 comparison (below) and both models started on it in parallel (9B on server 1, `nano-35b` on server
@@ -722,7 +739,8 @@ Recommended or noticed while adding `--hosts`, not done yet:
 - **Reviewer and thinking with `nano-35b`.** Measure on server 2 (one at a time): the two fake cases
   with the reviewer on (does `nano-35b` still fake; are fakes caught), the edit group with and without
   it (false alarms, time), then the same set with `NANO_THINK=0` (thinking was what stopped the 9B
-  shipping broken code, at 1.7x the time; ~20x on `nano-35b`; it is on by default, the reviewer off). ~6 h at `-n 10`, ~3 h at `-n 5`; ~half if server 1 gets
+  shipping broken code, at 1.7x the time; measured on `nano-35b` against `low`: same quality, and on is not slower on real tasks, so it stays
+on; the reviewer is off). ~6 h at `-n 10`, ~3 h at `-n 5`; ~half if server 1 gets
   32 GB RAM and `nano-35b` too (16 GB is too little: 13.2 GB of the model sits in RAM). If the reviewer
   comes back: run it in the background on server 1 (9B), so the input box doesn't wait for it; a
   late warning must name the turn it is about, since `/undo` takes back the latest.
