@@ -304,6 +304,20 @@ almost nothing (Qwen 3.5 keeps per-token memory in few layers, and the cache is 
 total at 16k, 23.6 at 32k, 23.8 at 49k (10.6 GB on the GPU, 13.2 in RAM); writing still ~41 tok/s,
 a cached next turn 0.23 s; a cold read of a 46k-token prompt 71 s (the cost of a bigger context).
 
+**Reviewer off by default (2026-10-02)** (`NANO_REVIEW=1` brings it back). With `nano-35b` the user
+asked whether the reviewer and reasoning should stay on. The reviewer's case was measured on the
+9B (19/19 fakes caught, ~5% false alarms, 10-30 s per writing turn); whether `nano-35b` fakes at
+all is not. It is off while `nano-35b` is used for real, the code and evals unchanged. Moving it to
+server 1 alone would save only a few seconds a review; a background review on server 1 would save
+most of the wait (see Pending).
+
+**Thinking off by default too** (`NANO_THINK=1` brings it back). On `nano-35b`, one small coding
+prompt (an IPv4 validator): `think: true` reasoned 14,249 chars, 4,230 tokens out, **108 s**;
+`false` 128 tokens, **5.6 s**, about 20x. Ollama's levels aren't honoured by this model: "high"
+reasoned 631 chars (7.8 s), "medium" 10,548 (83 s), "low" 1,359 (12 s), so they read as "on" with a
+lot of run-to-run variance; "medium" isn't an option. On the 9B, thinking is what stopped it
+shipping broken code (FizzBuzz 9/20 off, 20/20 on); whether `nano-35b` needs it is unmeasured.
+
 **Coding: verified by the user directly, not by evals.** A coding eval group was built for the
 comparison (below) and both models started on it in parallel (9B on server 1, `nano-35b` on server
 2, 10 runs per task), but runs took 3-4 min each (~3 h in all), and the user stopped it to verify
@@ -701,6 +715,13 @@ Recommended or noticed while adding `--hosts`, not done yet:
   a longer timeout for installs, or a pip cache or mirror on the machine running the harness.
   Worth doing only if it keeps happening. The next day it was 10/10 at ~20 s a run (124 s at the
   baseline) with nothing relevant changed: the network, as suspected.
+- **Reviewer and thinking with `nano-35b`.** Measure on server 2 (one at a time): the two fake cases
+  with the reviewer on (does `nano-35b` still fake; are fakes caught), the edit group with and without
+  it (false alarms, time), then the same set with `NANO_THINK=0` (thinking was what stopped the 9B
+  shipping broken code, at 1.7x the time; ~20x on `nano-35b`; both are off by default now). ~6 h at `-n 10`, ~3 h at `-n 5`; ~half if server 1 gets
+  32 GB RAM and `nano-35b` too (16 GB is too little: 13.2 GB of the model sits in RAM). If the reviewer
+  comes back: run it in the background on server 1 (9B), so the input box doesn't wait for it; a
+  late warning must name the turn it is about, since `/undo` takes back the latest.
 - **`nano-35b`'s coding:** being verified by the user on real work. The coding eval group is built
   and checked (see below) if numbers are wanted later: `-k coding -n 10`, about 3-4 min per run, so
   ~3 h per model at 10 runs per task. A full `nano-35b` baseline (behaviour cases) is still to be

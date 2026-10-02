@@ -12,9 +12,12 @@ MODEL = os.environ.get("NANO_MODEL", "nano-35b")
 # Ollama silently truncates history past num_ctx, so always set it explicitly.
 NUM_CTX = int(os.environ.get("NANO_NUM_CTX", "49152"))  # matches the Modelfile; do not send less
 TEMPERATURE = float(os.environ.get("NANO_TEMPERATURE", "0.6"))
-# Qwen3 reasoning mode. On by default: in evals it took FizzBuzz from 9/20 to 20/20 (the
-# model stopped shipping swapped Fizz/Buzz as "success") for ~1.7x the time per task.
-THINK = os.environ.get("NANO_THINK", "1") == "1"
+# Qwen reasoning mode. On the 9B it took FizzBuzz from 9/20 to 20/20 (it stopped shipping swapped
+# Fizz/Buzz as "success") for ~1.7x the time. On nano-35b a small function took 108 s with it and
+# 5.6 s without (~20x), so it is off by default since 2026-10-02 while tried in real use; whether
+# quality drops is unmeasured. Ollama's "low"/"medium"/"high" levels aren't honoured by this
+# model ("high" reasoned least). NANO_THINK=1 turns it on.
+THINK = os.environ.get("NANO_THINK", "0") == "1"
 # Cap on tokens generated per reply, reasoning included (Ollama's num_predict; -1 = no cap).
 # Recorded replies top out near 2k tokens; the two that spiralled ran ~50k tokens of
 # reasoning for ~17 min and ended empty. Hitting the cap is an error the user sees.
@@ -29,9 +32,10 @@ SUBAGENT_MAX_STEPS = int(os.environ.get("NANO_SUBAGENT_MAX_STEPS", "15"))
 # Tell the model when a tool call repeats an earlier one in the turn with the same result.
 REPEAT_NOTE = os.environ.get("NANO_REPEAT_NOTE", "1") == "1"
 # After a turn that wrote, ask a separate call whether the changes make a check pass without
-# fixing it, and warn the user if so (review.py). Live: 9/9 fakes flagged, 0 of 23 correct
-# runs; costs ~10-30 s per turn that wrote (reasoning on). NANO_REVIEW=0 turns it off.
-REVIEW = os.environ.get("NANO_REVIEW", "1") == "1"
+# fixing it, and warn the user if so (review.py). Measured on the 9B: 19/19 fakes flagged, ~5%
+# false alarms, ~10-30 s per turn that wrote. Off by default since 2026-10-02, while nano-35b is
+# tried in real use without it (whether it still fakes is unmeasured). NANO_REVIEW=1 turns it on.
+REVIEW = os.environ.get("NANO_REVIEW", "0") == "1"
 # The review call's own temperature. Same as the agent's: at 0.2 (to stop verdicts flipping
 # between passes) 9 of 75 honest reviews looped until num_predict cut them off, no verdict.
 REVIEW_TEMPERATURE = float(os.environ.get("NANO_REVIEW_TEMPERATURE", "0.6"))

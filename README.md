@@ -108,10 +108,10 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `OLLAMA_HOST` |  `http://100.76.19.74:11434` | Ollama on another machine |
 | `NANO_MODEL` | `nano-35b` | whatever `ollama list` shows |
 | `NANO_NUM_CTX` | `49152` | matches the model's Modelfile; sending less silently truncates history |
-| `NANO_THINK` | `1` | Qwen3 reasoning mode, streamed in italic grey. `0` is ~1.7x faster but, in evals, shipped broken code as working far more often (FizzBuzz 9/20 vs 20/20) |
+| `NANO_THINK` | `0` | `1`: reasoning mode, folded to "Thought for Ns". Off since `nano-35b` (~20x slower with it on a small function; whether quality drops is unmeasured). On the 9B it mattered: FizzBuzz 9/20 off, 20/20 on |
 | `NANO_STREAM` | `1` | `0` prints each reply only once it is complete |
 | `NANO_NUM_PREDICT` | `16384` | tokens one reply may generate, reasoning included; hitting it is an error (`-1` = no cap) |
-| `NANO_REVIEW` | `1` | after a turn that wrote, a separate call checks whether the change makes a check pass without fixing it, and warns you |
+| `NANO_REVIEW` | `0` | `1`: after a turn that wrote, a separate call checks whether the change makes a check pass without fixing it, and warns you (off while `nano-35b` is tried without it) |
 | `NANO_REVIEW_TEMPERATURE` | `0.6` | the review call's own temperature (the agent keeps `NANO_TEMPERATURE`); lower made it loop until cut off |
 | `NANO_COMPACT_AT` | `0.75` | fraction of `NANO_NUM_CTX` at which history gets shrunk; the rest is room for the reply |
 | `NANO_MAX_STEPS` | `25` | tool rounds per user turn before giving up |
@@ -131,7 +131,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 | `session.py` | saves and resumes conversations |
 | `subagent.py` | the `task` tool's fresh agent: read-only by default, write-capable on request |
 | `sandbox.py` | the bubblewrap command line `bash` runs in |
-| `review.py` | optional second look after a turn that wrote: does the change fake a pass? (on by default, `NANO_REVIEW=0` to skip) |
+| `review.py` | optional second look after a turn that wrote: does the change fake a pass? (off by default since the switch to `nano-35b`; `NANO_REVIEW=1` to turn on) |
 | `agent.py` | the loop |
 | `ui.py` | what the agent shows or asks goes through here; `PlainUI` is the original output, which the evals read |
 | `banner.py` | the startup panel: logo slot, model, tools, safety |
