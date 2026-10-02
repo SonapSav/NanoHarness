@@ -303,9 +303,25 @@ context barely changed the split; swap unused, 16 GB RAM still available. **Rais
 almost nothing (Qwen 3.5 keeps per-token memory in few layers, and the cache is `q8_0`): 23.4 GB
 total at 16k, 23.6 at 32k, 23.8 at 49k (10.6 GB on the GPU, 13.2 in RAM); writing still ~41 tok/s,
 a cached next turn 0.23 s; a cold read of a 46k-token prompt 71 s (the cost of a bigger context).
+
+**Coding: verified by the user directly, not by evals.** A coding eval group was built for the
+comparison (below) and both models started on it in parallel (9B on server 1, `nano-35b` on server
+2, 10 runs per task), but runs took 3-4 min each (~3 h in all), and the user stopped it to verify
+`nano-35b`'s coding on real work instead. Finished before the stop, all `code_to_spec`: 9B 2 pass,
+3 fail; `nano-35b` 2 pass. Too few to conclude anything; no results file was written.
 65,536 would also fit but push cold reads past 100 s. Modelfile updated on server 2; with it loaded
 at 49k, swap 10 MB (unused), 16 GB RAM available. Chosen on the user's
 impression that it is more capable; **not yet measured** (see Pending).
+
+**The coding eval group** (`evals/coding.py`, group `coding`): five realistic tasks graded by
+**hidden tests**, written into the workdir only after the model is done (`checks.hidden_tests`), so
+a pass means the code works: `code_to_spec` (a duration parser to a docstring spec, incl. errors),
+`code_two_file_bug` (a failing test whose real cause is a unit mix-up in a module another caller also
+uses; a symptom-only fix fails), `code_feature_with_tests` (due dates and a sort, plus the model's own
+tests), `code_refactor` (split a long function, every function ≤25 lines, identical output over a
+grid of inputs), `code_csv_summary` (a stdlib CSV summary with quoted commas and empty fields, as a
+function and a CLI). `tests/test_coding.py` checks each is fair: the hidden tests fail on the starting
+files and pass with a reference solution.
 
 ## Eval baseline
 
@@ -685,10 +701,12 @@ Recommended or noticed while adding `--hosts`, not done yet:
   a longer timeout for installs, or a pip cache or mirror on the machine running the harness.
   Worth doing only if it keeps happening. The next day it was 10/10 at ~20 s a run (124 s at the
   baseline) with nothing relevant changed: the network, as suspected.
-- **Measure `nano-35b`.** A coding eval group first (4-5 realistic tasks graded by hidden tests:
-  the current cases test behaviour, and their coding tasks are FizzBuzz-level), then that group
-  on both models (reference on server 1, `nano-35b` on server 2, in parallel, ~2 h) and a full
-  `nano-35b` baseline (server 2 only, ~3-4 h). Estimated ~1 h to build the group.
+- **`nano-35b`'s coding:** being verified by the user on real work. The coding eval group is built
+  and checked (see below) if numbers are wanted later: `-k coding -n 10`, about 3-4 min per run, so
+  ~3 h per model at 10 runs per task. A full `nano-35b` baseline (behaviour cases) is still to be
+  taken, on server 2 only.
+- ~~**The coding group in the full suite**~~ (5 cases × 10 runs at 3-4 min, ~3 h): made opt-in. A
+  plain run leaves it out; `-k coding` (or a task's name) selects it, `--with-coding` adds it.
 - **Other options, if `nano-35b` isn't enough:** an OpenAI-compatible backend (OpenRouter, also
   OpenAI or local llama.cpp/vLLM servers), stdlib only, with a cost line and a spending cap (code
   leaves the machine, it costs money); research tools (web search/fetch, source discipline, a

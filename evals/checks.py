@@ -124,6 +124,27 @@ def file_missing(path):
     return Check(f"{path} does not exist", lambda r: (not (r.workdir / path).exists(), ""))
 
 
+def hidden_tests(name, test_code):
+    """Grade by tests the model never saw: written into the workdir only after the run, run,
+    then removed. A pass means the code works, not that the model matched visible tests."""
+    module = f"hidden_test_{name}"
+
+    def fn(r):
+        from nanoharness import tools    # config.WORKDIR is still this run's workdir
+        path = r.workdir / f"{module}.py"
+        path.write_text(test_code)
+        try:
+            out = tools.bash(f"python3 -m unittest -q {module} 2>&1")
+        finally:
+            path.unlink(missing_ok=True)
+        head, _, body = out.partition("\n\n")
+        if head == "exit code: 0":
+            return True, short(body, 80)
+        failed = [l for l in body.splitlines() if l.startswith(("FAIL:", "ERROR:"))]
+        return False, short("; ".join(failed) or body, 300)
+    return Check("hidden tests pass", fn)
+
+
 def command_output(command, expected=None, name=None):
     """Run `command` in the workdir (sandboxed, like the agent's own bash) and require
     exit 0 and, if given, exactly `expected` on stdout+stderr."""

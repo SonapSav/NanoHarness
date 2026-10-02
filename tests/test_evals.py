@@ -351,3 +351,12 @@ def test_undo_is_believed_checks(monkeypatch):
     assert run.run_case(case("undo_is_believed"))["passed"]
     script(monkeypatch, say("Yes, notes.txt exists with the word hello."))
     assert not run.run_case(case("undo_is_believed"))["passed"]
+
+
+def test_the_coding_group_is_opt_in():
+    names = lambda cs: {c.name for c in cs}
+    plain = names(run.select(cases.CASES))
+    assert "code_to_spec" not in plain and "fix_failing_test" in plain
+    assert names(run.select(cases.CASES, "coding")) == {c.name for c in cases.CASES if c.group == "coding"}
+    assert "code_refactor" in names(run.select(cases.CASES, "code_refactor"))
+    assert names(run.select(cases.CASES, with_coding=True)) == names(cases.CASES)

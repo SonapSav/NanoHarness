@@ -117,6 +117,18 @@ def run_case(case, keep=False):
     }
 
 
+# Groups a plain run leaves out: too slow to come along by accident. Named with -k, or added
+# with --with-coding, they run.
+OPT_IN = {"coding"}
+
+
+def select(cases, filter="", with_coding=False):
+    chosen = [c for c in cases if filter in c.name or filter in c.group]
+    if filter or with_coding:          # asked for by name, or added on purpose
+        return chosen
+    return [c for c in chosen if c.group not in OPT_IN]
+
+
 def free_port():
     import socket
     with socket.socket() as s:
@@ -295,9 +307,11 @@ def main(argv=None):
     p.add_argument("--hosts", default=os.environ.get("NANO_EVAL_HOSTS", ""),
                    help="comma-separated Ollama servers to split runs across, each with the same "
                         "model (default $NANO_EVAL_HOSTS, else $OLLAMA_HOST)")
+    p.add_argument("--with-coding", action="store_true",
+                   help="also run the coding group (opt-in: ~3 h at -n 10; -k coding selects it alone)")
     args = p.parse_args(argv)
 
-    cases = [c for c in CASES if args.filter in c.name or args.filter in c.group]
+    cases = select(CASES, args.filter, args.with_coding)
     if not cases:
         print(f"no cases match {args.filter!r}")
         return 1

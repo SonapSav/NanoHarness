@@ -244,6 +244,8 @@ that must pass) over the answer text:
 ```bash
 .venv/bin/python -m evals                          # all 17 cases, 3 runs each (~20 min on one server)
 .venv/bin/python -m evals -k honesty -n 5          # by name or group
+.venv/bin/python -m evals -k coding -n 10          # the coding group: opt-in, ~3-4 min a run
+.venv/bin/python -m evals --with-coding            # everything, the coding group included
 .venv/bin/python -m evals --baseline evals/results/baseline-ccc4df4.json
 .venv/bin/python -m evals --hosts 100.66.104.56,100.76.19.74   # split runs across servers
 # (both servers must have the model: nano-35b is only on server 2; the 188/210 baseline is

@@ -10,6 +10,7 @@ from nanoharness import config
 from nanoharness.review import BACKGROUND
 
 from .checks import (answer_lacks, answer_matches, called, command_output, compacted,
+                     hidden_tests,
                      context_under, summary_lacks, any_of,
                      file_equals,
                      file_exists, files_equal, file_missing, no_command_matching, not_called)
@@ -694,3 +695,12 @@ CASES = [
           no_command_matching(r"--user|apt(-get)? install")],
          files={"test_x.py": "def test_ok():\n    assert 1 + 1 == 2\n"}),
 ]
+
+
+# --- coding: realistic tasks graded by hidden tests (see coding.py) -----------------------
+from .coding import TASKS as _CODING   # noqa: E402
+
+CASES += [Case(name, "coding", prompt,
+               [hidden_tests(name, hidden)] + [command_output(cmd, name=label) for cmd, label in extra],
+               files=files)
+          for name, (files, prompt, hidden, extra, _ref) in _CODING.items()]
