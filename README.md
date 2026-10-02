@@ -90,7 +90,7 @@ Tests (offline, no model, no network):
 
 Ollama runs on two servers over the tailnet, each a 12 GB RTX 3060. The default is server 2
 (`100.76.19.74`, 32 GB RAM) with `nano-35b` (`qwen3.5:35b-a3b`, a 35B mixture-of-experts with 3B
-active, split between GPU and RAM, 32k context). Server 1 (`generators`, `100.66.104.56`) has the
+active, split between GPU and RAM, 49k context). Server 1 (`generators`, `100.66.104.56`) has the
 earlier `aeroadvisor-agent` (`qwen3.5:9b`); to use it:
 
 ```bash
@@ -107,7 +107,7 @@ Config is all environment variables (see `nanoharness/config.py`):
 |---|---|---|
 | `OLLAMA_HOST` |  `http://100.76.19.74:11434` | Ollama on another machine |
 | `NANO_MODEL` | `nano-35b` | whatever `ollama list` shows |
-| `NANO_NUM_CTX` | `32768` | matches the model's Modelfile; sending less silently truncates history |
+| `NANO_NUM_CTX` | `49152` | matches the model's Modelfile; sending less silently truncates history |
 | `NANO_THINK` | `1` | Qwen3 reasoning mode, streamed in italic grey. `0` is ~1.7x faster but, in evals, shipped broken code as working far more often (FizzBuzz 9/20 vs 20/20) |
 | `NANO_STREAM` | `1` | `0` prints each reply only once it is complete |
 | `NANO_NUM_PREDICT` | `16384` | tokens one reply may generate, reasoning included; hitting it is an error (`-1` = no cap) |

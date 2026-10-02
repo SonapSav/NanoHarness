@@ -294,11 +294,17 @@ size class.
 **Switched to `nano-35b` (2026-10-02).** `qwen3.5:35b-a3b` at Q4_K_M: 35B parameters, a mixture of
 experts with 3B active per token, same family as before (tools, reasoning). 23.4 GB, so it doesn't
 fit 12 GB; without `num_gpu 99` Ollama puts 10.7 GB (45%) on the GPU and 12.9 GB in RAM. Modelfile
-on server 2 at `~/ollama-models/Modelfile.35b` (`num_ctx 32768`, sampling as `aeroadvisor-agent`;
+on server 2 at `~/ollama-models/Modelfile.35b` (`num_ctx 49152`, sampling as `aeroadvisor-agent`;
 the server already had `OLLAMA_FLASH_ATTENTION=1` and `OLLAMA_KV_CACHE_TYPE=q8_0`). Measured:
 writing **~41 tok/s** (as fast as the 9B: only 3B active), reading a prompt cold ~700 tok/s (about
 half the 9B: a 29k-token prompt takes 43 s), a cached next turn 0.24 s, load ~27 s; 16k to 32k
-context barely changed the split; swap unused, 16 GB RAM still available. Chosen on the user's
+context barely changed the split; swap unused, 16 GB RAM still available. **Raised to 49,152**, the
+9B's size, which the compaction settings and evals were tuned around: the context costs this model
+almost nothing (Qwen 3.5 keeps per-token memory in few layers, and the cache is `q8_0`): 23.4 GB
+total at 16k, 23.6 at 32k, 23.8 at 49k (10.6 GB on the GPU, 13.2 in RAM); writing still ~41 tok/s,
+a cached next turn 0.23 s; a cold read of a 46k-token prompt 71 s (the cost of a bigger context).
+65,536 would also fit but push cold reads past 100 s. Modelfile updated on server 2; with it loaded
+at 49k, swap 10 MB (unused), 16 GB RAM available. Chosen on the user's
 impression that it is more capable; **not yet measured** (see Pending).
 
 ## Eval baseline
